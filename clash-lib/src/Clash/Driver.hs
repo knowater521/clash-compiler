@@ -73,7 +73,7 @@ import           Clash.Annotations.TopEntity
   (TopEntity (..), PortName(PortName, PortProduct))
 import           Clash.Annotations.TopEntity.Extra ()
 import           Clash.Backend
-import           Clash.Core.Evaluator.Types       (PrimStep, PrimUnwind)
+import           Clash.Core.Evaluator.Models      (EvalPrim)
 import           Clash.Core.Name                  (Name (..))
 import           Clash.Core.Pretty                (PrettyOptions(..), showPpr')
 import           Clash.Core.Term                  (Term)
@@ -223,7 +223,7 @@ generateHDL
   -> (CustomReprs -> TyConMap -> Type ->
       State HWMap (Maybe (Either String FilteredHWType)))
   -- ^ Hardcoded 'Type' -> 'HWType' translator
-  -> (PrimStep, PrimUnwind)
+  -> EvalPrim
   -- ^ Hardcoded evaluator (delta-reduction)
   -> [TopEntityT]
   -- ^ All topentities and associated testbench
@@ -849,7 +849,7 @@ normalizeEntity
   -> (CustomReprs -> TyConMap -> Type ->
       State HWMap (Maybe (Either String FilteredHWType)))
   -- ^ Hardcoded 'Type' -> 'HWType' translator
-  -> (PrimStep, PrimUnwind)
+  -> EvalPrim
   -- ^ Hardcoded evaluator (delta-reduction)
   -> [Id]
   -- ^ TopEntities
