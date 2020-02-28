@@ -76,6 +76,11 @@ evaluateVar e i
   | otherwise
   = return $ VNeu (NeVar i)
  where
+  -- A variable that refers to a previously unevaluated term is evaluated
+  -- on lookup in an environment that doesn't contain that variable. This
+  -- is to stop the evaluator looping when looking up a self-recursive
+  -- definition (i.e. recursive let bindings).
+  --
   go s = either (evaluate (deleteEnv s i e)) return
 {-# SCC evaluateVar #-}
 
@@ -101,36 +106,32 @@ evalApplication
   -> Delay Value
 evalApplication toArg f env x y = do
   case x of
-    VData dc args -> applyToData dc args
-    VPrim pi args -> applyToPrim pi args
+    VData dc args -> applyToData dc (args <> [toArg y])
+    VPrim pi args -> applyToPrim pi (args <> [toArg y])
     _ -> f x y
  where
-  -- TODO applyToData and applyToPrim are basically the same function.
-  -- Abstract this further?
-
   applyToData dc args =
-    case compare (length tys) (length args') of
-      LT -> error "applyToData: Overapplied DC"
-      EQ -> return (VData dc args')
-      GT -> return (VData dc args')
+    case compare (length args) (length tys) of
+      LT -> return (VData dc args)
+      EQ -> return (VData dc args)
+      GT -> error "applyToData: Overapplied DC"
    where
-    args' = args <> [toArg y]
     tys = fst $ splitFunForallTy (dcType dc)
 
   applyToPrim pi args =
-    case compare (length tys) (length args') of
-      LT -> error "applyToPrim: Overapplied prim"
-      EQ -> envPrimEval env env pi args >>= \case
-        Nothing -> error "applyToPrim: Could not evaluate prim"
-        Just v  -> return v
-      GT -> return (VPrim pi args')
+    case compare (length args) (length tys) of
+      LT -> return (VPrim pi args)
+      EQ -> envPrimEval env env pi args
+      GT -> error "applyToPrim: Overapplied prim"
    where
-    args' = args <> [toArg y]
     tys = fst $ splitFunForallTy (primType pi)
 {-# SCC evalApplication #-}
 
 evaluateLetrec :: Env -> [LetBinding] -> Term -> Delay Value
 evaluateLetrec env bs x = do
+  -- We can't use MonadFix here, as evaluate is too strict. Currently, this
+  -- means bindings in letrec expressions are evaluated without being able to
+  -- refer to other binders.
   evalBs <- traverse (bitraverse return (fmap Right . evaluate env)) bs
   let env' = foldr (uncurry $ extendEnv LocalId) env evalBs
 
@@ -151,19 +152,14 @@ evaluateCase env x ty xs = do
     fmap (VNeu . NeCase s ty) (traverse (evaluateAlt env) xs)
 
   litCase l =
-    let matches = \case
-          -- TODO Some DataPat are really literals (Integer, Natural)
-          DataPat{} -> False
-          _ -> True
-
-        eval (pat, e) = case pat of
+    let eval (pat, e) = case pat of
           LitPat a
             | l == a -> evaluate env e
           DefaultPat -> evaluate env e
           -- TODO: We hit this now
           _ -> error ("litCase: Cannot match on " <> show pat)
 
-     in evalAlts env matches eval xs
+     in evalAlts env (const True) eval xs
 
   evalDataPat args tvs ids e =
     let tys  = zip tvs (Either.rights args)
@@ -304,7 +300,6 @@ quoteLam x e env = do
   return (NLam x quoteE)
 {-# SCC quoteLam #-}
 
--- TODO This presumably is also where it hangs
 quoteTyLam :: TyVar -> Term -> Env -> Delay Nf
 quoteTyLam x e env = do
   evalE  <- applyTy (VTyLam x e env) (VarTy x)

@@ -85,12 +85,12 @@ primDecodeFloat_Int env pi args
   , (tyArgs, [tupDc]) <- typeInfo tcm ty
   = let !(F# a) = i
         !(# p, q #) = decodeFloat_Int# a
-     in return . Just . VData tupDc $ mappend (fmap Right tyArgs)
+     in return . VData tupDc $ mappend (fmap Right tyArgs)
           [ Left $ toValue tcm ty (I# p)
           , Left $ toValue tcm ty (I# q)
           ]
   | otherwise
-  = return Nothing
+  = return (VPrim pi args)
  where
   tcm = envTcMap env
   ty  = primType pi

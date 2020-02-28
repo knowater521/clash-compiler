@@ -87,14 +87,14 @@ primDecodeDouble2Int env pi args
   , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
   = let !(D# a) = i
         !(# p, q, r, s #) = decodeDouble_2Int# a
-     in return . Just . VData tupDc $ mappend (fmap Right tyArgs)
+     in return . VData tupDc $ mappend (fmap Right tyArgs)
           [ Left $ toValue tcm ty (I# p)
           , Left $ toValue tcm ty (W# q)
           , Left $ toValue tcm ty (W# r)
           , Left $ toValue tcm ty (I# s)
           ]
   | otherwise
-  = return Nothing
+  = return (VPrim pi args)
  where
   tcm = envTcMap env
   ty  = primType pi
@@ -105,12 +105,12 @@ primDecodeDoubleInt64 env pi args
   , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
   = let !(D# a) = i
         !(# p, q #) = decodeDouble_Int64# a
-     in return . Just . VData tupDc $ mappend (fmap Right tyArgs)
+     in return . VData tupDc $ mappend (fmap Right tyArgs)
           [ Left $ toValue tcm ty (fromIntegral (I64# p) :: Int)
           , Left $ toValue tcm ty (I# q)
           ]
   | otherwise
-  = return Nothing
+  = return (VPrim pi args)
  where
   tcm = envTcMap env
   ty  = primType pi

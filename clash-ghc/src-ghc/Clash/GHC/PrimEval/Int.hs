@@ -35,9 +35,9 @@ intPrims = HashMap.fromList
   , ("GHC.Prim.mulIntMayOflo#", evalBinaryOp# mulIntMayOflo#)
 
     -- TODO These need catchDivByZero
-  , ("GHC.Prim.quotInt#", evalMissing)
-  , ("GHC.Prim.remInt#", evalMissing)
-  , ("GHC.Prim.quotRemInt#", evalMissing)
+  , ("GHC.Prim.quotInt#", evalBinaryOp# quotInt#)
+  , ("GHC.Prim.remInt#", evalBinaryOp# remInt#)
+  , ("GHC.Prim.quotRemInt#", evalBinaryOpIntC quotRemInt#)
 
   , ("GHC.Prim.andI#", evalBinaryOp# andI#)
   , ("GHC.Prim.orI#", evalBinaryOp# orI#)
@@ -96,12 +96,12 @@ evalBinaryOpIntC op env pi args
   = let !(I# a) = i
         !(I# b) = j
         !(# d, c #) = a `op` b
-     in return . Just . VData tupDc $ mappend (fmap Right tyArgs)
+     in return . VData tupDc $ mappend (fmap Right tyArgs)
           [ Left $ toValue tcm ty (I# d)
           , Left $ toValue tcm ty (I# c)
           ]
   | otherwise
-  = return Nothing
+  = return (VPrim pi args)
  where
   tcm = envTcMap env
   ty  = primType pi

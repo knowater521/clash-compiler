@@ -129,12 +129,12 @@ primDecodeDoubleInteger env pi args
   , [tupDc] <- tyConDataCons tupTc
   = let !(D# a) = i
         !(# b, c #) = decodeDoubleInteger a
-     in return . Just . VData tupDc $ mappend (fmap Right tyArgs)
+     in return . VData tupDc $ mappend (fmap Right tyArgs)
           [ Left $ toValue tcm ty b
           , Left $ toValue tcm ty (I# c)
           ]
   | otherwise
-  = return Nothing
+  = return (VPrim pi args)
  where
   tcm = envTcMap env
   ty  = primType pi

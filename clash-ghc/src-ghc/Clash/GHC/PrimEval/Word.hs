@@ -38,10 +38,10 @@ wordPrims = HashMap.fromList
   , ("GHC.Prim.timesWord2#", evalBinaryOpWord2 timesWord2#)
 
     -- TODO These need catchDivByZero
-  , ("GHC.Prim.quotWord#", evalMissing)
-  , ("GHC.Prim.remWord#", evalMissing)
-  , ("GHC.Prim.quotRemWord#", evalMissing)
-  , ("GHC.Prim.quotRemWord2#", evalMissing)
+  , ("GHC.Prim.quotWord#", evalBinaryOp# quotWord#)
+  , ("GHC.Prim.remWord#", evalBinaryOp# remWord#)
+  , ("GHC.Prim.quotRemWord#", evalBinaryOpWord2 quotRemWord#)
+  , ("GHC.Prim.quotRemWord2#", primQuotRemWord2)
 
   , ("GHC.Prim.and#", evalBinaryOp# and#)
   , ("GHC.Prim.or#", evalBinaryOp# or#)
@@ -87,6 +87,26 @@ wordPrims = HashMap.fromList
   , ("GHC.Prim.byteSwap#", evalUnaryOp# byteSwap#)
   ]
 
+primQuotRemWord2 :: EvalPrim
+primQuotRemWord2 env pi args
+  | Just [i, j, k] <- traverse fromValue (Either.lefts args)
+  , TyConApp tupTcNm tyArgs <- tyView . snd $ splitFunForallTy (primType pi)
+  , Just tupTc <- lookupUniqMap tupTcNm tcm
+  , [tupDc] <- tyConDataCons tupTc
+  = let !(W# a) = i
+        !(W# b) = j
+        !(W# c) = k
+        !(# d, e #) = quotRemWord2# a b c
+     in return . VData tupDc $ mappend (fmap Right tyArgs)
+          [ Left $ toValue tcm ty (W# d)
+          , Left $ toValue tcm ty (W# e)
+          ]
+  | otherwise
+  = return (VPrim pi args)
+ where
+  tcm = envTcMap env
+  ty = primType pi
+
 primUncheckedShiftL :: EvalPrim
 primUncheckedShiftL = evalBinaryOp $ \i j ->
   let !(W# a) = i
@@ -109,20 +129,20 @@ evalBinaryOpWord2 :: (Word# -> Word# -> (# Word#, Word# #)) -> EvalPrim
 evalBinaryOpWord2 op env pi args
   | Just [i, j] <- traverse fromValue (Either.lefts args)
   , TyConApp tupTcNm tyArgs <- tyView . snd $ splitFunForallTy (primType pi)
-  , Just tupTc <- lookupUniqMap tupTcNm (envTcMap env)
+  , Just tupTc <- lookupUniqMap tupTcNm tcm
   , [tupDc] <- tyConDataCons tupTc
   = let !(W# a) = i
         !(W# b) = j
         !(# d, c #) = a `op` b
-     in return . Just . VData tupDc $ mappend (fmap Right tyArgs)
+     in return . VData tupDc $ mappend (fmap Right tyArgs)
           [ Left $ toValue tcm ty (W# d)
           , Left $ toValue tcm ty (W# c)
           ]
   | otherwise
-  = return Nothing
+  = return (VPrim pi args)
  where
   tcm = envTcMap env
-  ty  = primType pi
+  ty = primType pi
 
 evalBinaryOpIntC :: (Word# -> Word# -> (# Word#, Int# #)) -> EvalPrim
 evalBinaryOpIntC op env pi args
@@ -133,12 +153,12 @@ evalBinaryOpIntC op env pi args
   = let !(W# a) = i
         !(W# b) = j
         !(# d, c #) = a `op` b
-     in return . Just . VData tupDc $ mappend (fmap Right tyArgs)
+     in return . VData tupDc $ mappend (fmap Right tyArgs)
           [ Left $ toValue tcm ty (W# d)
           , Left $ toValue tcm ty (I# c)
           ]
   | otherwise
-  = return Nothing
+  = return (VPrim pi args)
  where
   tcm = envTcMap env
   ty  = primType pi

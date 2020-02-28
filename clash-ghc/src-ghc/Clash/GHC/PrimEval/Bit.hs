@@ -45,9 +45,9 @@ bitPrims = HashMap.fromList
 
 primHigh :: EvalPrim
 primHigh env pi _ =
-  return . Just $ toValue (envTcMap env) (primType pi) (Bit 0 1)
+  return $ toValue (envTcMap env) (primType pi) (Bit 0 1)
 
 primLow :: EvalPrim
 primLow env pi _ =
-  return . Just $ toValue (envTcMap env) (primType pi) (Bit 0 0)
+  return $ toValue (envTcMap env) (primType pi) (Bit 0 0)
 

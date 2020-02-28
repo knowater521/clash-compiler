@@ -191,6 +191,7 @@ library
                       Clash.GHC.PrimEval.Char
                       Clash.GHC.PrimEval.Common
                       Clash.GHC.PrimEval.Convert
+                      Clash.GHC.PrimEval.CString
                       Clash.GHC.PrimEval.Double
                       Clash.GHC.PrimEval.EnumTag
                       Clash.GHC.PrimEval.Float

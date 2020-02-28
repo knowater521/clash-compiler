@@ -24,13 +24,13 @@ enumTagPrims = HashMap.fromList
   ]
 
 primTagToEnum :: EvalPrim
-primTagToEnum env _ args
+primTagToEnum env pi args
   | [ConstTy (TyCon tcN)] <- Either.rights args
   , Just [i] <- traverse fromValue (Either.lefts args)
   , Just tc <- lookupUniqMap tcN (envTcMap env)
   , Just dc <- find (\x -> dcTag x == i + 1) (tyConDataCons tc)
-  = return . Just $ VData dc []
+  = return (VData dc [])
 
   | otherwise
-  = return Nothing
+  = return (VPrim pi args)
 

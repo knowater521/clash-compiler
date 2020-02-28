@@ -6,6 +6,8 @@
 
 module Clash.GHC.PrimEval.Convert where
 
+import Prelude hiding (pi)
+
 import Data.Bits
 import qualified Data.Either as Either
 import Data.Primitive.ByteArray (ByteArray(..))
@@ -37,26 +39,27 @@ class ToValue a where
 instance ToValue Bit where
   toValue tcm ty (Bit m v)
     | TyConApp bTcNm _ <- tyView ty
-    = let funTy = foldr1 mkFunTy [integerPrimTy, integerPrimTy, mkTyConApp bTcNm []]
-          pi = PrimInfo "Clash.Sized.Internal.BitVector.fromInteger##" funTy WorkNever
-       in VPrim pi
-            [ Left $ toValue tcm integerPrimTy (m .&. 1)
-            , Left $ toValue tcm integerPrimTy (v .&. 1)
-            ]
+    = VPrim (mkPrimInfo bTcNm)
+        [ Left $ toValue tcm integerPrimTy (m .&. 1)
+        , Left $ toValue tcm integerPrimTy (v .&. 1)
+        ]
 
     | otherwise
     = error ("toValue: Expected Bit but given: " <> show ty)
+   where
+    mkPrimInfo tcNm =
+      let pTy = foldr1 mkFunTy [integerPrimTy, integerPrimTy, mkTyConApp tcNm []]
+       in PrimInfo "Clash.Sized.Internal.BitVector.fromInteger##" pTy WorkNever
 
 instance (KnownNat n) => ToValue (BitVector n) where
   toValue tcm ty (BV m i)
     | TyConApp bvTcNm _ <- tyView ty
-    = let pi = mkPrimInfo bvTcNm
-       in VPrim pi
-            [ Right undefined -- The type n
-            , Left $ toValue tcm naturalPrimTy bvSize
-            , Left $ toValue tcm integerPrimTy m
-            , Left $ toValue tcm integerPrimTy i
-            ]
+    = VPrim (mkPrimInfo bvTcNm)
+        [ Right undefined -- The type n
+        , Left $ toValue tcm naturalPrimTy bvSize
+        , Left $ toValue tcm integerPrimTy m
+        , Left $ toValue tcm integerPrimTy i
+        ]
 
     | otherwise
     = error ("toValue: Expected BitVector " <> show bvSize <> " but given " <> show ty)
@@ -133,18 +136,19 @@ instance FromValue Bit where
   fromValue = \case
     VPrim pi args
       | primName pi == "Clash.Sized.Internal.BitVector.fromInteger##"
-      , Just [0, v] <- traverse fromValue (Either.lefts args)
-      -> Just (Bit 0 v)
+      , Just [m, v] <- traverse fromValue (Either.lefts args)
+      -> Just (Bit m v)
 
     _ -> Nothing
 
-{-
-instance FromValue BitVector where
+instance FromValue (BitVector n) where
   fromValue = \case
-    VPrim pi args
+    VPrim pi [_, Left mv, Left iv]
       | primName pi == "Clash.Sized.Internal.BitVector.fromInteger#"
-      , Just 
--}
+      , Just [m, i] <- traverse fromValue [mv, iv]
+      -> Just (BV m i)
+
+    _ -> Nothing
 
 instance FromValue ByteArray where
   fromValue = \case
@@ -177,11 +181,13 @@ instance FromValue Integer where
     VData dc args ->
       case (dcTag dc, Either.lefts args) of
         (1, [v]) -> toInteger <$> fromValue @Int v
-        (2, [v]) -> flip fmap (fromValue @ByteArray v)
+        (2, [v]) -> 
           (\x -> let !(ByteArray ba) = x in Jp# (BN# ba))
+            <$> (fromValue @ByteArray v)
 
-        (3, [v]) -> flip fmap (fromValue @ByteArray v)
+        (3, [v]) -> 
           (\x -> let !(ByteArray ba) = x in Jn# (BN# ba))
+            <$> (fromValue @ByteArray v)
 
         _ -> Nothing
     _ -> Nothing
@@ -192,8 +198,9 @@ instance FromValue Natural where
     VData dc args ->
       case (dcTag dc, Either.lefts args) of
         (1, [v]) -> wordToNatural <$> fromValue @Word v
-        (2, [v]) -> flip fmap (fromValue @ByteArray v)
+        (2, [v]) ->
           (\x -> let !(ByteArray ba) = x in naturalFromInteger $ Jp# (BN# ba))
+            <$> (fromValue @ByteArray v)
 
         _ -> Nothing
     _ -> Nothing

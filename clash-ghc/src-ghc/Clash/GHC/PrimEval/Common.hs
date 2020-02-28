@@ -1,14 +1,20 @@
 module Clash.GHC.PrimEval.Common where
 
+import Prelude hiding (pi)
+
+import Control.Exception (ArithException(..), evaluate, tryJust)
+import Control.DeepSeq (force)
 import qualified Control.Monad.Except as Except
 import qualified Data.Either as Either
+import Debug.Trace (traceShow)
+import System.IO.Unsafe (unsafeDupablePerformIO)
 
 import Clash.Core.DataCon
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
 import Clash.Core.TyCon
 import Clash.Core.Type
-import Clash.Core.Util (piResultTys, tyNatSize)
+import Clash.Core.Util (piResultTys, tyNatSize, undefinedTm)
 import Clash.Unique (lookupUniqMap)
 
 import Clash.GHC.PrimEval.Convert
@@ -17,8 +23,7 @@ import Clash.GHC.PrimEval.Convert
 -- and arguments back into VPrim.
 --
 evalId :: EvalPrim
-evalId _ pi args = return $ Just (VPrim pi args)
-
+evalId _ pi args = return (VPrim pi args)
 
 -- TODO Rebase and use the nice interpolation errors here.
 evalMissing :: EvalPrim
@@ -28,18 +33,16 @@ evalMissing _ pi _ =
 -- Evaluate a generic unary op, provided a means to extract a literal
 -- from the input value, and convert the output to a value.
 --
--- TODO: Does primType pi need to be changed to only the RHS of the last ->
---
 evalUnaryOp
   :: (FromValue a, ToValue b)
   => (a -> b)
   -> EvalPrim
 evalUnaryOp op env pi args
   | Just [x] <- traverse fromValue (Either.lefts args)
-  = return . Just $ toValue (envTcMap env) (primType pi) (op x)
+  = return $ toValue (envTcMap env) (primType pi) (op x)
 
   | otherwise
-  = return Nothing
+  = return (VPrim pi args)
 
 -- Evaluate a generic binary op, provided a means to extract literals
 -- from the input values, and convert the output to a value.
@@ -54,10 +57,21 @@ evalBinaryOp op env pi args
   | [xV, yV] <- Either.lefts args
   , Just x <- fromValue xV
   , Just y <- fromValue yV
-  = return . Just $ toValue (envTcMap env) (primType pi) (x `op` y)
+  = return $ toValue (envTcMap env) (primType pi) (x `op` y)
 
   | otherwise
-  = return Nothing
+  = return (VPrim pi args)
+
+catchDivByZero :: Env -> PrimInfo -> [Either Value Type] -> Term -> Term
+catchDivByZero env pi args x =
+  case unsafeDupablePerformIO . tryJust divZeroEx $ evaluate (force x) of
+    Left e -> traceShow e (undefinedTm resTy)
+    Right r -> r
+ where
+  resTy = resultType (envTcMap env) (primType pi) (Either.rights args)
+
+  divZeroEx DivideByZero = Just DivideByZero
+  divZeroEx _ = Nothing
 
 -- Given a type, extract information about the type parameters and data
 -- constructors availble, e.g.

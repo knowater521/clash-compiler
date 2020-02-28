@@ -51,6 +51,7 @@ runPE src = do
 
   forM_ (reverse $ sortBy (comparing (nameOcc . varName . fst)) idsTerms) $ \(i,t) -> do
     putStrLn $ "Evaluating " <> show (nameOcc (varName i))
+    print t
     print (partialEval primEval emptyVarEnv bm tcm emptyInScopeSet ids t)
 
     hFlush stdout

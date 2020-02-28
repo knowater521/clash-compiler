@@ -2,15 +2,20 @@ module Clash.GHC.PrimEval where
 
 import Prelude hiding (pi)
 
+import Control.Exception.Base
 import qualified Data.HashMap.Strict as HashMap
+import Debug.Trace (traceM)
+import System.IO.Unsafe (unsafeDupablePerformIO)
 
+import Clash.Core.Evaluator.Delay
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
+import Clash.Driver.Types (DebugLevel(DebugName))
 
 import Clash.GHC.PrimEval.Bit
 import Clash.GHC.PrimEval.BitVector
-import Clash.GHC.PrimEval.ByteArray
 import Clash.GHC.PrimEval.Char
+import Clash.GHC.PrimEval.CString
 import Clash.GHC.PrimEval.Double
 import Clash.GHC.PrimEval.EnumTag
 import Clash.GHC.PrimEval.Float
@@ -24,19 +29,29 @@ import Clash.GHC.PrimEval.Word
 -- time 'Nothing' is returned is when an attempt to evaluate a prim fails.
 --
 primEval :: EvalPrim
-primEval _ pi args =
-  return $ Just (VPrim pi args)
-{-
+primEval env pi args =
   case HashMap.lookup (primName pi) primsMap of
-    Just f  -> f env pi args
-    Nothing -> return $ Just (VPrim pi args)
--}
+    Just f ->
+      unsafeDupablePerformIO $ evaluate (f env pi args) `catch` errToUndefined 
+
+    -- TODO Warning on missing primitive.
+    Nothing -> return (VPrim pi args)
  where
+  errToUndefined DivideByZero =
+    error "WHOOPS: DIVIDE BY ZERO"
+  errToUndefined e = error
+    $  "Unexpected "
+    <> show e
+    <> " when evalauting "
+    <> show (primName pi)
+    <> " with args "
+    <> show args
+
   primsMap = mconcat
     [ bitPrims
     , bitVectorPrims
-    , byteArrayPrims
     , charPrims
+    , cStringPrims
     , doublePrims
     , enumTagPrims
     , floatPrims
@@ -45,4 +60,15 @@ primEval _ pi args =
     , narrowingPrims
     , wordPrims
     ]
+
+-- | Emits a warning to stderr using traceM. This is somewhat of a hack
+-- to make up for the fact that clash lacks proper diagnostics.
+--
+warn :: DebugLevel -> PrimInfo -> Delay ()
+warn level pi
+  | level >= DebugName = do
+      traceM ("No implementation for prim: " <> show (primName pi))
+      return ()
+
+  | otherwise = return ()
 

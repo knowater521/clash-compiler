@@ -25,7 +25,7 @@ import Clash.Core.Var
 import Clash.Core.VarEnv
 import Clash.Driver.Types
 
-type EvalPrim = Env -> PrimInfo -> [Either Value Type] -> Delay (Maybe Value)
+type EvalPrim = Env -> PrimInfo -> [Either Value Type] -> Delay Value
 
 -- TODO This environment should contain any local terms / types needed by 
 -- the evaluator, as well as any globals which are known (primitives and
@@ -67,8 +67,8 @@ mkEnv
   -> Env
 mkEnv eval ts bm = Env eval emptyVarEnv emptyVarEnv gs ps
  where
-  gs = mapVarEnv (\b -> (bindingSpec b, Left $ bindingTerm b)) bm
-  ps = mapVarEnv Left ts
+  gs = fmap (\b -> (bindingSpec b, Left $ bindingTerm b)) bm
+  ps = fmap Left ts
 
 asSubst :: Env -> Subst
 asSubst = error "asSubst"
@@ -89,7 +89,7 @@ deleteEnv LocalId i e =
 deleteEnv GlobalId i e =
   e { envGlobals = delVarEnv (envGlobals e) i }
 
--- Neutral terms cannot be reduced, as they represent things like variables
+-- | Neutral terms cannot be reduced, as they represent things like variables
 -- which are unknown, partially applied functions, or case expressions where
 -- the scrutinee is not yet an inspectable value. Consider:
 --

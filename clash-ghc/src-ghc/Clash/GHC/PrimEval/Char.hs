@@ -43,11 +43,11 @@ primC env pi args
   | ([], [charDc]) <- typeInfo (envTcMap env) (primType pi)
   , Just [i] <- traverse fromValue (Either.lefts args)
   = let !(C# a) = i
-     in return . Just $ VData charDc
+     in return $ VData charDc
           [Left $ toValue (envTcMap env) (primType pi) (C# a)]
 
   | otherwise
-  = return Nothing
+  = return (VPrim pi args)
 
 evalComparison# :: (Char# -> Char# -> Int#) -> EvalPrim
 evalComparison# op = evalBinaryOp $ \i j ->
