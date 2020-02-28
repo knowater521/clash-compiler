@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Clash.GHC.PrimEval.EnumTag
+module Clash.GHC.Evaluator.EnumTag
   ( enumTagPrims
   ) where
 
@@ -16,7 +16,7 @@ import Clash.Core.TyCon
 import Clash.Core.Type
 import Clash.Unique
 
-import Clash.GHC.PrimEval.Convert
+import Clash.GHC.Evaluator.Convert
 
 enumTagPrims :: HashMap Text EvalPrim
 enumTagPrims = HashMap.fromList

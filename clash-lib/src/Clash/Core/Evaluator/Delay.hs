@@ -5,8 +5,6 @@ module Clash.Core.Evaluator.Delay
   , runDelay
   ) where
 
-import Control.Monad.Fix
-
 -- Represent a computation that either yields a value now, or gives a
 -- computation that yields a value later.
 --
@@ -25,9 +23,6 @@ instance Monad Delay where
 
   Now x   >>= f = f x
   Later g >>= f = Later (g >>= f)
-
-instance MonadFix Delay where
-  mfix f = let a = f (runDelay a) in a
 
 instance (Show a) => Show (Delay a) where
   show (Now a)   = show a

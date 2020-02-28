@@ -1,7 +1,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Clash.GHC.PrimEval.Char
+module Clash.GHC.Evaluator.Char
   ( charPrims
   ) where
 
@@ -17,8 +17,8 @@ import GHC.Types
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
 
-import Clash.GHC.PrimEval.Common
-import Clash.GHC.PrimEval.Convert
+import Clash.GHC.Evaluator.Common
+import Clash.GHC.Evaluator.Convert
 
 -- | Primitive Operations defined on Char / Char#
 --

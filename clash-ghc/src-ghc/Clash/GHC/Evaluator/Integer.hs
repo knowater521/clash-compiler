@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UnboxedTuples #-}
 
-module Clash.GHC.PrimEval.Integer
+module Clash.GHC.Evaluator.Integer
   ( integerPrims
   ) where
 
@@ -23,8 +23,8 @@ import Clash.Core.TyCon
 import Clash.Core.Type
 import Clash.Unique
 
-import Clash.GHC.PrimEval.Common
-import Clash.GHC.PrimEval.Convert
+import Clash.GHC.Evaluator.Common
+import Clash.GHC.Evaluator.Convert
 
 integerPrims :: HashMap Text EvalPrim
 integerPrims = HashMap.fromList

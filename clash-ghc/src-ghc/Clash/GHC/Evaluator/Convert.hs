@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
-module Clash.GHC.PrimEval.Convert where
+module Clash.GHC.Evaluator.Convert where
 
 import Prelude hiding (pi)
 

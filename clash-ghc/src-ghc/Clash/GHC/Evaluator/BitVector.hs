@@ -1,7 +1,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Clash.GHC.PrimEval.BitVector
+module Clash.GHC.Evaluator.BitVector
   ( bitVectorPrims
   ) where
 
@@ -13,7 +13,7 @@ import Data.Text (Text)
 import Clash.Core.Evaluator.Models
 import Clash.Core.Util (tyNatSize)
 
-import Clash.GHC.PrimEval.Common
+import Clash.GHC.Evaluator.Common
 
 bitVectorPrims :: HashMap Text EvalPrim
 bitVectorPrims = HashMap.fromList

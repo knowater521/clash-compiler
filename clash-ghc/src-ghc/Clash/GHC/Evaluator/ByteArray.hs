@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Clash.GHC.PrimEval.ByteArray
+module Clash.GHC.Evaluator.ByteArray
   ( byteArrayPrims
   ) where
 
@@ -10,8 +10,8 @@ import Data.Text (Text)
 
 import Clash.Core.Evaluator.Models
 
-import Clash.GHC.PrimEval.Common
-import Clash.GHC.PrimEval.Convert
+import Clash.GHC.Evaluator.Common
+import Clash.GHC.Evaluator.Convert
 
 byteArrayPrims :: HashMap Text EvalPrim
 byteArrayPrims = HashMap.fromList

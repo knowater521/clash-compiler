@@ -1,7 +1,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Clash.GHC.PrimEval.Bit
+module Clash.GHC.Evaluator.Bit
   ( bitPrims
   ) where
 
@@ -16,8 +16,8 @@ import Clash.Sized.Internal.BitVector
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
 
-import Clash.GHC.PrimEval.Common
-import Clash.GHC.PrimEval.Convert
+import Clash.GHC.Evaluator.Common
+import Clash.GHC.Evaluator.Convert
 
 bitPrims :: HashMap Text EvalPrim
 bitPrims = HashMap.fromList

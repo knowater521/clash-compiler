@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UnboxedTuples #-}
 
-module Clash.GHC.PrimEval.Int
+module Clash.GHC.Evaluator.Int
   ( intPrims
   ) where
 
@@ -22,8 +22,8 @@ import Clash.Core.TyCon
 import Clash.Core.Type
 import Clash.Unique
 
-import Clash.GHC.PrimEval.Common
-import Clash.GHC.PrimEval.Convert
+import Clash.GHC.Evaluator.Common
+import Clash.GHC.Evaluator.Convert
 
 -- | Primitive Operations defined on Int#
 --

@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UnboxedTuples #-}
 
-module Clash.GHC.PrimEval.Word
+module Clash.GHC.Evaluator.Word
   ( wordPrims
   ) where
 
@@ -21,8 +21,8 @@ import Clash.Core.TyCon
 import Clash.Core.Type
 import Clash.Unique
 
-import Clash.GHC.PrimEval.Common
-import Clash.GHC.PrimEval.Convert
+import Clash.GHC.Evaluator.Common
+import Clash.GHC.Evaluator.Convert
 
 -- | Primitive Operatations defined on Word# and related
 -- fixed-width types (Word{8,16,32,64})

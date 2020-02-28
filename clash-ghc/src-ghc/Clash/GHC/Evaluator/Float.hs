@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UnboxedTuples #-}
 
-module Clash.GHC.PrimEval.Float
+module Clash.GHC.Evaluator.Float
   ( floatPrims
   ) where
 
@@ -19,8 +19,8 @@ import GHC.Types
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
 
-import Clash.GHC.PrimEval.Common
-import Clash.GHC.PrimEval.Convert
+import Clash.GHC.Evaluator.Common
+import Clash.GHC.Evaluator.Convert
 
 floatPrims :: HashMap Text EvalPrim
 floatPrims = HashMap.fromList

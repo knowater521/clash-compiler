@@ -1,4 +1,6 @@
-module Clash.GHC.PrimEval where
+module Clash.GHC.Evaluator
+  ( evaluatePrimOp
+  ) where
 
 import Prelude hiding (pi)
 
@@ -12,24 +14,24 @@ import Clash.Core.Evaluator.Models
 import Clash.Core.Term
 import Clash.Driver.Types (DebugLevel(DebugName))
 
-import Clash.GHC.PrimEval.Bit
-import Clash.GHC.PrimEval.BitVector
-import Clash.GHC.PrimEval.Char
-import Clash.GHC.PrimEval.CString
-import Clash.GHC.PrimEval.Double
-import Clash.GHC.PrimEval.EnumTag
-import Clash.GHC.PrimEval.Float
-import Clash.GHC.PrimEval.Int
-import Clash.GHC.PrimEval.Integer
-import Clash.GHC.PrimEval.Narrowings
-import Clash.GHC.PrimEval.Word
+import Clash.GHC.Evaluator.Bit
+import Clash.GHC.Evaluator.BitVector
+import Clash.GHC.Evaluator.Char
+import Clash.GHC.Evaluator.CString
+import Clash.GHC.Evaluator.Double
+import Clash.GHC.Evaluator.EnumTag
+import Clash.GHC.Evaluator.Float
+import Clash.GHC.Evaluator.Int
+import Clash.GHC.Evaluator.Integer
+import Clash.GHC.Evaluator.Narrowings
+import Clash.GHC.Evaluator.Word
 
 -- If we try to evaluate a prim we haven't added an implementation for in the
 -- primsMap, we simply return it back without trying to evaluate it. The only
 -- time 'Nothing' is returned is when an attempt to evaluate a prim fails.
 --
-primEval :: EvalPrim
-primEval env pi args =
+evaluatePrimOp :: EvalPrim
+evaluatePrimOp env pi args =
   case HashMap.lookup (primName pi) primsMap of
     Just f ->
       unsafeDupablePerformIO $ evaluate (f env pi args) `catch` errToUndefined 

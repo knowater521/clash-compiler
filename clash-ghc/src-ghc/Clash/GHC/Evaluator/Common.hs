@@ -1,4 +1,4 @@
-module Clash.GHC.PrimEval.Common where
+module Clash.GHC.Evaluator.Common where
 
 import Prelude hiding (pi)
 
@@ -17,7 +17,7 @@ import Clash.Core.Type
 import Clash.Core.Util (piResultTys, tyNatSize, undefinedTm)
 import Clash.Unique (lookupUniqMap)
 
-import Clash.GHC.PrimEval.Convert
+import Clash.GHC.Evaluator.Convert
 
 -- | For primitives which are themselves values, simply rewrap the PrimInfo
 -- and arguments back into VPrim.

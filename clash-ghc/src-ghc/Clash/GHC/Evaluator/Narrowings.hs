@@ -1,7 +1,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Clash.GHC.PrimEval.Narrowings
+module Clash.GHC.Evaluator.Narrowings
   ( narrowingPrims
   ) where
 
@@ -13,7 +13,7 @@ import GHC.Types
 
 import Clash.Core.Evaluator.Models (EvalPrim)
 
-import Clash.GHC.PrimEval.Common
+import Clash.GHC.Evaluator.Common
 
 -- | Primitive Operations to narrow native sized Int / Word.
 --

@@ -178,39 +178,38 @@ library
   Autogen-Modules:    Paths_clash_ghc
 
   Exposed-Modules:    Clash.Main
+                      Clash.GHC.Evaluator
 
                       -- exposed for use by the benchmarks
                       Clash.GHC.GenerateBindings
                       Clash.GHC.LoadModules
                       Clash.GHC.NetlistTypes
 
-                      Clash.GHC.PrimEval
-                      Clash.GHC.PrimEval.Bit
-                      Clash.GHC.PrimEval.BitVector
-                      Clash.GHC.PrimEval.ByteArray
-                      Clash.GHC.PrimEval.Char
-                      Clash.GHC.PrimEval.Common
-                      Clash.GHC.PrimEval.Convert
-                      Clash.GHC.PrimEval.CString
-                      Clash.GHC.PrimEval.Double
-                      Clash.GHC.PrimEval.EnumTag
-                      Clash.GHC.PrimEval.Float
-                      Clash.GHC.PrimEval.Int
-                      Clash.GHC.PrimEval.Integer
-                      Clash.GHC.PrimEval.Narrowings
-                      Clash.GHC.PrimEval.Word
-
                       Clash.GHCi.Common
 
-  Other-Modules:      Clash.GHCi.UI
+  Other-Modules:      Clash.GHC.ClashFlags
+                      Clash.GHC.Evaluator.Bit
+                      Clash.GHC.Evaluator.BitVector
+                      Clash.GHC.Evaluator.ByteArray
+                      Clash.GHC.Evaluator.Char
+                      Clash.GHC.Evaluator.Common
+                      Clash.GHC.Evaluator.Convert
+                      Clash.GHC.Evaluator.CString
+                      Clash.GHC.Evaluator.Double
+                      Clash.GHC.Evaluator.EnumTag
+                      Clash.GHC.Evaluator.Float
+                      Clash.GHC.Evaluator.Int
+                      Clash.GHC.Evaluator.Integer
+                      Clash.GHC.Evaluator.Narrowings
+                      Clash.GHC.Evaluator.Word
+                      Clash.GHC.GHC2Core
+                      Clash.GHC.LoadInterfaceFiles
+                      Clash.GHC.Util
+                      Clash.GHCi.UI
                       Clash.GHCi.UI.Info
                       Clash.GHCi.UI.Monad
                       Clash.GHCi.UI.Tags
 
-                      Clash.GHC.ClashFlags
-                      Clash.GHC.GHC2Core
-                      Clash.GHC.LoadInterfaceFiles
-                      Clash.GHC.Util
                       Paths_clash_ghc
   if impl(ghc >= 8.6.0)
     Other-Modules:    Clash.GHCi.Leak

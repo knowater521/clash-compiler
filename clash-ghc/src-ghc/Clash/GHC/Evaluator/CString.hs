@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Clash.GHC.PrimEval.CString
+module Clash.GHC.Evaluator.CString
   ( cStringPrims
   ) where
 
@@ -10,7 +10,7 @@ import Data.Text (Text)
 
 import Clash.Core.Evaluator.Models
 
-import Clash.GHC.PrimEval.Common
+import Clash.GHC.Evaluator.Common
 
 cStringPrims :: HashMap Text EvalPrim
 cStringPrims = HashMap.fromList
