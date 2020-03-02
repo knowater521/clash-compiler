@@ -9,9 +9,14 @@ import Control.Concurrent.Supply (Supply)
 import Control.DeepSeq (NFData(..))
 import Data.Bifunctor (first, second)
 import Data.Foldable (foldl')
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import GHC.Generics (Generic)
 
 import BasicTypes (InlineSpec(..))
+import SrcLoc (noSrcSpan)
 
 import Clash.Core.DataCon
 import Clash.Core.Evaluator.Delay (Delay)
@@ -27,31 +32,22 @@ import Clash.Driver.Types
 
 type EvalPrim = Env -> PrimInfo -> [Either Value Type] -> Delay Value
 
--- TODO This environment should contain any local terms / types needed by 
--- the evaluator, as well as any globals which are known (primitives and
--- previously evaluated terms).
---
--- It should be embeddable back into a substitution, as it is effectively a
--- closure that lambas / tylambas are applied under.
---
+type EnvGlobals = VarEnv (Binding (Either Term Value))
+type EnvPrims   = (IntMap Value, Int)
+
 data Env = Env
   { envPrimEval :: EvalPrim
-    -- ^ Primitive Evaluation Function
-  , envTypes    :: VarEnv Type
-    -- ^ Local Types
-  , envLocals   :: VarEnv (Either Term Value)
-    -- ^ Local Expressions
-  , envGlobals  :: VarEnv (InlineSpec, Either Term Value)
-    -- ^ Global Expressions
-  , envPrims    :: VarEnv (Either Term Value)
-    -- ^ Primitive Expressions
+  , envTypes    :: Map TyVar Type
+  , envLocals   :: Map Id (Either Term Value)
+  , envGlobals  :: EnvGlobals
+  , envPrims    :: EnvPrims
   , envTcMap    :: TyConMap
   , envInScope  :: InScopeSet
   , envSupply   :: Supply
   }
 
 instance Show Env where
- show e = show (eltsVarEnv (envLocals e), eltsVarEnv (envTypes e))
+  show e = show (envLocals e, envTypes e)
 
 instance NFData Env where
   rnf (Env _ ls ts gs ps tcm _ _) =
@@ -59,35 +55,91 @@ instance NFData Env where
 
 mkEnv
   :: EvalPrim
-  -> VarEnv Term
+  -> EnvPrims
   -> BindingMap
   -> TyConMap
   -> InScopeSet
   -> Supply
   -> Env
-mkEnv eval ts bm = Env eval emptyVarEnv emptyVarEnv gs ps
+mkEnv eval ps bm =
+  Env eval mempty mempty gs ps
  where
-  gs = fmap (\b -> (bindingSpec b, Left $ bindingTerm b)) bm
-  ps = fmap Left ts
+  gs = fmap (fmap Left) bm
 
+-- TODO This is likely not the correct substitution. We should make sure that
+-- the InScopeSet and substitutions are correct.
+--
 asSubst :: Env -> Subst
-asSubst = error "asSubst"
+asSubst env = subst2
+ where
+  subst0 = mkSubst (envInScope env)
+  subst1 = foldr (\(i,ty) s -> extendTvSubst s i ty) subst0 (Map.toList $ envTypes env)
+  subst2 = extendIdSubstList subst1 (Map.toList . fmap asTerm $ envLocals env)
 
-extendEnv :: IdScope -> Id -> Either Term Value -> Env -> Env
-extendEnv LocalId i v e =
-  e { envLocals = extendVarEnv i v (envLocals e) }
-extendEnv GlobalId i v e =
-  e { envGlobals = extendVarEnv i (Inline, v) (envGlobals e) }
+-- | Add a new term / value to the environment. The unique for the new
+-- element is guaranteed to be unique within the environment.
+--
+-- For new global bindings, we assume that it is possible to inline
+-- them later during evaluation.
+--
+insertEnv :: IdScope -> Id -> Either Term Value -> Env -> Env
+insertEnv scope i etv env =
+  case scope of
+    LocalId  -> env
+      { envLocals = Map.insert i' etv (envLocals env)
+      , envInScope = extendInScopeSet (envInScope env) i'
+      }
 
-extendEnvTy :: TyVar -> Type -> Env -> Env
-extendEnvTy i ty e =
-  e { envTypes = extendVarEnv i ty (envTypes e) }
+    GlobalId -> 
+      let b = Binding i' noSrcSpan Inline etv
+       in env
+      { envGlobals = extendVarEnv i' b (envGlobals env)
+      , envInScope = extendInScopeSet (envInScope env) i'
+      }
+ where
+  i' = uniqAway (envInScope env) i
 
+insertAllEnv :: IdScope -> [(Id, Either Term Value)] -> Env -> Env
+insertAllEnv s xs env = foldr (uncurry $ insertEnv s) env xs
+
+-- | Add a new type to the environment. The unique for the new
+-- element is guaranteed to be unique within the environment.
+--
+insertEnvTy :: TyVar -> Type -> Env -> Env
+insertEnvTy i ty env =
+  env
+    { envTypes = Map.insert i' ty (envTypes env)
+    , envInScope = extendInScopeSet (envInScope env) i'
+    }
+ where
+  i' = uniqAway (envInScope env) i
+
+insertAllEnvTys :: [(TyVar, Type)] -> Env -> Env
+insertAllEnvTys xs env = foldr (uncurry insertEnvTy) env xs
+
+-- | Add a new primitive to the environment. Primitives are keyed by an
+-- integer ID in the evaluator. If the prim already exists in the environment,
+-- you should call 'updateEnvPrim' instead.
+--
+insertEnvPrim :: Value -> Env -> Env
+insertEnvPrim v env =
+   env { envPrims = (IntMap.insert n v pm, n + 1) }
+ where
+  (pm, n) = envPrims env
+
+-- | Delete the element with the speicified Id from the environment.
+--
 deleteEnv :: IdScope -> Id -> Env -> Env
-deleteEnv LocalId i e =
-  e { envLocals = delVarEnv (envLocals e) i }
-deleteEnv GlobalId i e =
-  e { envGlobals = delVarEnv (envGlobals e) i }
+deleteEnv scope i env =
+  case scope of
+    LocalId -> env { envLocals = Map.delete i (envLocals env) }
+    GlobalId -> env { envGlobals = delVarEnv (envGlobals env) i }
+
+updateEnvPrim :: Int -> Value -> Env -> Env
+updateEnvPrim i v env =
+  env { envPrims = (IntMap.insert i v pm, n) }
+ where
+  (pm, n) = envPrims env
 
 -- | Neutral terms cannot be reduced, as they represent things like variables
 -- which are unknown, partially applied functions, or case expressions where
@@ -146,7 +198,10 @@ data Nf
 --
 class AsTerm a where
   asTerm :: a -> Term
- 
+
+instance AsTerm Term where
+  asTerm = id
+
 instance (AsTerm a) => AsTerm (Neutral a) where
   asTerm (NeVar v)        = Var v
   asTerm (NeApp x y)      = App (asTerm x) (asTerm y)
@@ -172,4 +227,7 @@ instance AsTerm Nf where
   asTerm (NTyLam x e)     = TyLam x (asTerm e)
   asTerm (NCast x a b)    = Cast (asTerm x) a b
   asTerm (NTick x ti)     = Tick ti (asTerm x)
+
+instance (AsTerm a, AsTerm b) => AsTerm (Either a b) where
+  asTerm = either asTerm asTerm
 

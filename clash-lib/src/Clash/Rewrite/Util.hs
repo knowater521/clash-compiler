@@ -58,7 +58,6 @@ import           BasicTypes                  (InlineSpec (..))
 
 import           Clash.Core.DataCon          (dcExtTyVars)
 import           Clash.Core.Evaluator.Semantics (partialEval)
-import           Clash.Core.Evaluator.Types  (PureHeap)
 import           Clash.Core.FreeVars
   (freeLocalVars, hasLocalFreeVars, localIdDoesNotOccurIn, localIdOccursIn,
    typeFreeVars, termFreeVars')
@@ -1094,7 +1093,7 @@ whnfRW (TransformContext is0 _) e _ = do
 -- To prevent unnecessary rewrites only do this when rewrite changed something.
 bindPureHeap
   :: TyConMap
-  -> PureHeap
+  -> VarEnv Term
   -> Rewrite extra
   -> Rewrite extra
 bindPureHeap tcm heap rw (TransformContext is0 hist) e = do

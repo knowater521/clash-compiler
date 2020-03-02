@@ -178,9 +178,9 @@ library
   Autogen-Modules:    Paths_clash_ghc
 
   Exposed-Modules:    Clash.Main
-                      Clash.GHC.Evaluator
 
                       -- exposed for use by the benchmarks
+                      Clash.GHC.Evaluator
                       Clash.GHC.GenerateBindings
                       Clash.GHC.LoadModules
                       Clash.GHC.NetlistTypes

@@ -21,6 +21,7 @@ import Util
 
 import Clash.Backend as Backend
 import Clash.Backend.VHDL
+import Clash.Core.Evaluator.Models
 import Clash.Core.Evaluator.Semantics
 import Clash.Core.Name
 import Clash.Core.Var
@@ -29,7 +30,6 @@ import Clash.Driver.Types
 import Clash.GHC.GenerateBindings
 import Clash.GHC.Evaluator
 import Clash.Netlist.BlackBox.Types (HdlSyn(Other))
-import Clash.Pretty
 import Clash.Unique
 
 opts :: ClashOpts
@@ -52,7 +52,7 @@ runPE src = do
   forM_ (reverse $ sortBy (comparing (nameOcc . varName . fst)) idsTerms) $ \(i,t) -> do
     putStrLn $ "Evaluating " <> show (nameOcc (varName i))
     print t
-    print (partialEval evaluatePrimOp emptyVarEnv bm tcm emptyInScopeSet ids t)
+    print (asTerm $ partialEval evaluatePrimOp (mempty, 0) bm tcm emptyInScopeSet ids t)
 
     hFlush stdout
     hFlush stderr

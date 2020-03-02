@@ -40,7 +40,7 @@ import Clash.Core.Term           (Term, Context)
 import Clash.Core.Type           (Type)
 import Clash.Core.TyCon          (TyConName, TyConMap)
 import Clash.Core.Var            (Id)
-import Clash.Core.VarEnv         (InScopeSet, VarEnv, VarSet)
+import Clash.Core.VarEnv         (InScopeSet, VarSet)
 import Clash.Driver.Types        (BindingMap, DebugLevel)
 import Clash.Netlist.Types       (FilteredHWType, HWMap)
 import Clash.Util
@@ -75,7 +75,7 @@ data RewriteState extra
   -- ^ Function which is currently normalized
   , _nameCounter      :: {-# UNPACK #-} !Int
   -- ^ Used for 'Fresh'
-  , _globalHeap       :: VarEnv Term
+  , _globalHeap       :: EnvPrims
   -- ^ Used as a heap for compile-time evaluation of primitives that live in I/O
   , _extra            :: !extra
   -- ^ Additional state

@@ -12,6 +12,7 @@ import Prelude hiding (pi)
 import Control.Concurrent.Supply (Supply)
 import Data.Bitraversable (bitraverse)
 import qualified Data.Either as Either
+import qualified Data.Map.Strict as Map
 
 import BasicTypes (InlineSpec(..))
 
@@ -31,7 +32,7 @@ import Clash.Driver.Types
 --
 partialEval
   :: EvalPrim
-  -> VarEnv Term
+  -> EnvPrims
   -> BindingMap
   -> TyConMap
   -> InScopeSet
@@ -66,12 +67,12 @@ evaluate env = \case
 
 evaluateVar :: Env -> Id -> Delay Value
 evaluateVar e i
-  | Just etv <- lookupVarEnv i (envLocals e)
+  | Just etv <- Map.lookup i (envLocals e)
   = go LocalId etv
 
-  | Just (s, etv) <- lookupVarEnv i (envGlobals e)
-  , s == Inline || s == Inlinable
-  = go GlobalId etv
+  | Just b <- lookupVarEnv i (envGlobals e)
+  , bindingSpec b == Inline || bindingSpec b == Inlinable
+  = go GlobalId (bindingTerm b)
 
   | otherwise
   = return $ VNeu (NeVar i)
@@ -127,22 +128,19 @@ evalApplication toArg f env x y = do
     tys = fst $ splitFunForallTy (primType pi)
 {-# SCC evalApplication #-}
 
+-- Bindings in letrec expressions are evaluated on-demand, relying on the
+-- behaviour of 'evaluateVar' to prevent cycling.
+--
 evaluateLetrec :: Env -> [LetBinding] -> Term -> Delay Value
-evaluateLetrec env bs x = do
-  -- We can't use MonadFix here, as evaluate is too strict. Currently, this
-  -- means bindings in letrec expressions are evaluated without being able to
-  -- refer to other binders.
-  evalBs <- traverse (bitraverse return (fmap Right . evaluate env)) bs
-  let env' = foldr (uncurry $ extendEnv LocalId) env evalBs
-
-  evaluate env' x
+evaluateLetrec env bs x = evaluate env' x
+ where
+  terms = fmap (fmap Left) bs
+  env' = foldr (uncurry $ insertEnv LocalId) env terms
 {-# SCC evaluateLetrec #-}
 
 evaluateCase :: Env -> Term -> Type -> [Alt] -> Delay Value
-evaluateCase env x ty xs = do
-  evalX <- evaluate env x
-
-  case evalX of
+evaluateCase env x ty xs =
+  evaluate env x >>= \case
     VLit l -> litCase l
     VData dc args -> dataCase dc args
     VPrim pi args -> primCase pi args
@@ -159,16 +157,12 @@ evaluateCase env x ty xs = do
           -- TODO: We hit this now
           _ -> error ("litCase: Cannot match on " <> show pat)
 
-     in evalAlts env (const True) eval xs
+     in evalAlts (const True) eval xs
 
   evalDataPat args tvs ids e =
     let tys  = zip tvs (Either.rights args)
-        tms  = zip ids (Either.lefts args)
-        env' = env
-                { envLocals = extendVarEnvList (envLocals env) (fmap Right <$> tms)
-                , envTypes  = extendVarEnvList (envTypes env) tys
-                -- TODO Extend InScopeSet ?
-                }
+        tms  = zip ids (Right <$> Either.lefts args)
+        env' = insertAllEnv LocalId tms (insertAllEnvTys tys env)
      in evaluate env' e
 
   dataCase dc args =
@@ -182,14 +176,14 @@ evaluateCase env x ty xs = do
           DefaultPat -> evaluate env e
           _ -> error ("dataCase: Cannot match on pattern " <> show pat)
 
-     in evalAlts env matches eval xs
+     in evalAlts matches eval xs
 
   primCase pi args =
     let eval (pat, e) = case pat of
           DataPat _ tvs ids -> evalDataPat args tvs ids e
           _ -> evaluate env e
 
-     in evalAlts env (const True) eval xs
+     in evalAlts (const True) eval xs
 {-# SCC evaluateCase #-}
 
 -- Evalaute an alternative without selecting it.
@@ -200,11 +194,7 @@ evaluateAlt env (pat, x)
   | DataPat dc tvs ids <- pat
   = let tys  = fmap (\tv -> (tv, VarTy tv)) tvs
         tms  = fmap (\i  -> (i, Right . VNeu $ NeVar i)) ids
-        env' = env
-                { envLocals = extendVarEnvList (envLocals env) tms
-                , envTypes  = extendVarEnvList (envTypes env) tys
-                -- TODO InScopeSet ?
-                }
+        env' = insertAllEnv LocalId tms (insertAllEnvTys tys env)
      in (pat,) <$> evaluate env' x
 
   | otherwise
@@ -221,15 +211,9 @@ findBestMatch isMatch alts =
   bestMatch (DefaultPat, _) xs = head xs
   bestMatch alt _ = alt
 
-evalAlts :: Env -> (Pat -> Bool) -> (Alt -> Delay Value) -> [Alt] -> Delay Value
-evalAlts env isMatch eval alts =
-  case filter (isMatch . fst) alts of
-    [] -> error "evalAlts: No matching alternatives for case"
-    (x:xs) -> eval (bestMatch x xs)
- where
-  bestMatch (DefaultPat, e) [] = (DefaultPat, e)
-  bestMatch (DefaultPat, _) xs = head xs
-  bestMatch alt _ = alt
+evalAlts :: (Pat -> Bool) -> (Alt -> Delay Value) -> [Alt] -> Delay Value
+evalAlts isMatch eval =
+  eval . findBestMatch isMatch
 {-# SCC evalAlts #-}
 
 evaluateCast :: Env -> Term -> Type -> Type -> Delay Value
@@ -250,7 +234,7 @@ apply (collectValueTicks -> (v1, ts)) v2 =
     VNeu n -> return (addTicks (VNeu (NeApp n v2)) ts)
 
     VLam x e env ->
-      let val = evaluate (extendEnv LocalId x (Right v2) env) e
+      let val = evaluate (insertEnv LocalId x (Right v2) env) e
        in delay (fmap (`addTicks` ts) val)
 
     _ -> error ("apply: Cannot apply value to " <> show v1)
@@ -263,7 +247,7 @@ applyTy (collectValueTicks -> (v, ts)) ty =
       return (addTicks (VNeu (NeTyApp n ty)) ts)
 
     VTyLam x e env ->
-      let val = evaluate (extendEnvTy x ty env) e
+      let val = evaluate (insertEnvTy x ty env) e
        in delay (fmap (`addTicks` ts) val)
 
     _ -> error ("applyTy: Cannot apply type to " <> show v)
