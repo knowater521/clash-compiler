@@ -76,7 +76,7 @@ catchDivByZero env pi args x =
 -- Given a type, extract information about the type parameters and data
 -- constructors availble, e.g.
 --
---   e.g. tyConsInfo boolTy == ([], [trueDc, falseDc])
+--   e.g. typeInfo boolTy == ([], [trueDc, falseDc])
 --
 typeInfo :: TyConMap -> Type -> ([Type], [DataCon])
 typeInfo tcm ty

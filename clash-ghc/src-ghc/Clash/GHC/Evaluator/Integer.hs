@@ -19,9 +19,6 @@ import GHC.Prim
 
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
-import Clash.Core.TyCon
-import Clash.Core.Type
-import Clash.Unique
 
 import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Convert
@@ -124,9 +121,7 @@ primEncodeDoubleInteger = evalBinaryOp $ \i j ->
 primDecodeDoubleInteger :: EvalPrim
 primDecodeDoubleInteger env pi args
   | Just [i] <- traverse fromValue (Either.lefts args)
-  , TyConApp tupTcNm tyArgs <- tyView . snd $ splitFunForallTy (primType pi)
-  , Just tupTc <- lookupUniqMap tupTcNm (envTcMap env)
-  , [tupDc] <- tyConDataCons tupTc
+  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
   = let !(D# a) = i
         !(# b, c #) = decodeDoubleInteger a
      in return . VData tupDc $ mappend (fmap Right tyArgs)

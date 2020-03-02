@@ -18,9 +18,6 @@ import GHC.Types
 
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
-import Clash.Core.TyCon
-import Clash.Core.Type
-import Clash.Unique
 
 import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Convert
@@ -90,9 +87,7 @@ primWord2Double = evalUnaryOp $ \i ->
 evalBinaryOpIntC :: (Int# -> Int# -> (# Int#, Int# #)) -> EvalPrim
 evalBinaryOpIntC op env pi args
   | Just [i, j] <- traverse fromValue (Either.lefts args)
-  , TyConApp tupTcNm tyArgs <- tyView . snd $ splitFunForallTy (primType pi)
-  , Just tupTc <- lookupUniqMap tupTcNm (envTcMap env)
-  , [tupDc] <- tyConDataCons tupTc
+  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
   = let !(I# a) = i
         !(I# b) = j
         !(# d, c #) = a `op` b

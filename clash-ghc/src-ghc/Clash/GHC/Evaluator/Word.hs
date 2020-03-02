@@ -17,9 +17,6 @@ import GHC.Types
 
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
-import Clash.Core.TyCon
-import Clash.Core.Type
-import Clash.Unique
 
 import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Convert
@@ -90,9 +87,7 @@ wordPrims = HashMap.fromList
 primQuotRemWord2 :: EvalPrim
 primQuotRemWord2 env pi args
   | Just [i, j, k] <- traverse fromValue (Either.lefts args)
-  , TyConApp tupTcNm tyArgs <- tyView . snd $ splitFunForallTy (primType pi)
-  , Just tupTc <- lookupUniqMap tupTcNm tcm
-  , [tupDc] <- tyConDataCons tupTc
+  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
   = let !(W# a) = i
         !(W# b) = j
         !(W# c) = k
@@ -128,9 +123,7 @@ primWord2Int = evalUnaryOp $ \i ->
 evalBinaryOpWord2 :: (Word# -> Word# -> (# Word#, Word# #)) -> EvalPrim
 evalBinaryOpWord2 op env pi args
   | Just [i, j] <- traverse fromValue (Either.lefts args)
-  , TyConApp tupTcNm tyArgs <- tyView . snd $ splitFunForallTy (primType pi)
-  , Just tupTc <- lookupUniqMap tupTcNm tcm
-  , [tupDc] <- tyConDataCons tupTc
+  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
   = let !(W# a) = i
         !(W# b) = j
         !(# d, c #) = a `op` b
@@ -147,9 +140,7 @@ evalBinaryOpWord2 op env pi args
 evalBinaryOpIntC :: (Word# -> Word# -> (# Word#, Int# #)) -> EvalPrim
 evalBinaryOpIntC op env pi args
   | Just [i, j] <- traverse fromValue (Either.lefts args)
-  , TyConApp tupTcNm tyArgs <- tyView . snd $ splitFunForallTy (primType pi)
-  , Just tupTc <- lookupUniqMap tupTcNm (envTcMap env)
-  , [tupDc] <- tyConDataCons tupTc
+  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
   = let !(W# a) = i
         !(W# b) = j
         !(# d, c #) = a `op` b
