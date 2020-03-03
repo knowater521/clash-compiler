@@ -8,6 +8,7 @@ module Clash.GHC.Evaluator.Integer
 
 import Prelude hiding (pi)
 
+import qualified Control.Monad.State.Strict as State
 import qualified Data.Either as Either
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
@@ -119,20 +120,22 @@ primEncodeDoubleInteger = evalBinaryOp $ \i j ->
   let !(I# a) = j in D# (encodeDoubleInteger i a)
 
 primDecodeDoubleInteger :: EvalPrim
-primDecodeDoubleInteger env pi args
+primDecodeDoubleInteger pi args
   | Just [i] <- traverse fromValue (Either.lefts args)
-  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
-  = let !(D# a) = i
-        !(# b, c #) = decodeDoubleInteger a
-     in return . VData tupDc $ mappend (fmap Right tyArgs)
-          [ Left $ toValue tcm ty b
-          , Left $ toValue tcm ty (I# c)
-          ]
+  = do tcm <- State.gets envTcMap
+       let (tyArgs, [tupDc]) = typeInfo tcm ty
+           !(D# a) = i
+           !(# b, c #) = decodeDoubleInteger a
+       
+       return . VData tupDc $ mappend (fmap Right tyArgs)
+         [ Left $ toValue tcm ty b
+         , Left $ toValue tcm ty (I# c)
+         ]
+
   | otherwise
   = return (VPrim pi args)
  where
-  tcm = envTcMap env
-  ty  = primType pi
+  ty = primType pi
 
 primDoubleFromInteger :: EvalPrim
 primDoubleFromInteger = evalUnaryOp $ \i ->

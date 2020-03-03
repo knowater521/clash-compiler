@@ -21,7 +21,6 @@ import Util
 
 import Clash.Backend as Backend
 import Clash.Backend.VHDL
-import Clash.Core.Evaluator.Models
 import Clash.Core.Evaluator.Semantics
 import Clash.Core.Name
 import Clash.Core.Var
@@ -52,7 +51,7 @@ runPE src = do
   forM_ (reverse $ sortBy (comparing (nameOcc . varName . fst)) idsTerms) $ \(i,t) -> do
     putStrLn $ "Evaluating " <> show (nameOcc (varName i))
     print t
-    print (asTerm $ partialEval evaluatePrimOp (mempty, 0) bm tcm emptyInScopeSet ids t)
+    print (fstOf3 $ partialEval evaluatePrimOp (mempty, 0) bm tcm emptyInScopeSet ids t)
 
     hFlush stdout
     hFlush stderr

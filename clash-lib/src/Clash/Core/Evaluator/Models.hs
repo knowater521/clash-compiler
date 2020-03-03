@@ -6,6 +6,7 @@ module Clash.Core.Evaluator.Models where
 import Prelude hiding (lookup, pi)
 
 import Control.Concurrent.Supply (Supply)
+import Control.Monad.State.Strict (State)
 import Control.DeepSeq (NFData(..))
 import Data.Bifunctor (first, second)
 import Data.Foldable (foldl')
@@ -19,7 +20,6 @@ import BasicTypes (InlineSpec(..))
 import SrcLoc (noSrcSpan)
 
 import Clash.Core.DataCon
-import Clash.Core.Evaluator.Delay (Delay)
 import Clash.Core.Literal
 import Clash.Core.Subst
 import Clash.Core.Term
@@ -30,10 +30,11 @@ import Clash.Core.Var
 import Clash.Core.VarEnv
 import Clash.Driver.Types
 
-type EvalPrim = Env -> PrimInfo -> [Either Value Type] -> Delay Value
+type Eval     = State Env
+type EvalPrim = PrimInfo -> [Either Value Type] -> Eval Value
 
 type EnvGlobals = VarEnv (Binding (Either Term Value))
-type EnvPrims   = (IntMap Value, Int)
+type EnvPrims = (IntMap Value, Int)
 
 data Env = Env
   { envPrimEval :: EvalPrim

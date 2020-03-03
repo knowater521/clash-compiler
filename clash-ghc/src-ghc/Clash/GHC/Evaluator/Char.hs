@@ -7,6 +7,7 @@ module Clash.GHC.Evaluator.Char
 
 import Prelude hiding (pi)
 
+import qualified Control.Monad.State.Strict as State
 import qualified Data.Either as Either
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap (fromList)
@@ -39,12 +40,14 @@ primOrd = evalUnaryOp $ \i ->
   let !(C# a) = i in I# (ord# a)
 
 primC :: EvalPrim
-primC env pi args
-  | ([], [charDc]) <- typeInfo (envTcMap env) (primType pi)
-  , Just [i] <- traverse fromValue (Either.lefts args)
-  = let !(C# a) = i
-     in return $ VData charDc
-          [Left $ toValue (envTcMap env) (primType pi) (C# a)]
+primC pi args
+  | Just [i] <- traverse fromValue (Either.lefts args)
+  = do tcm <- State.gets envTcMap
+       let ([], [charDc]) = typeInfo tcm (primType pi)
+           !(C# a) = i
+       
+       return $ VData charDc
+         [Left $ toValue tcm (primType pi) (C# a)]
 
   | otherwise
   = return (VPrim pi args)

@@ -4,6 +4,9 @@ module Clash.GHC.Evaluator.EnumTag
   ( enumTagPrims
   ) where
 
+import Prelude hiding (pi)
+
+import qualified Control.Monad.State.Strict as State
 import qualified Data.Either as Either
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
@@ -24,12 +27,15 @@ enumTagPrims = HashMap.fromList
   ]
 
 primTagToEnum :: EvalPrim
-primTagToEnum env pi args
-  | [ConstTy (TyCon tcN)] <- Either.rights args
-  , Just [i] <- traverse fromValue (Either.lefts args)
-  , Just tc <- lookupUniqMap tcN (envTcMap env)
-  , Just dc <- find (\x -> dcTag x == i + 1) (tyConDataCons tc)
-  = return (VData dc [])
+primTagToEnum pi args
+  | Just [i] <- traverse fromValue (Either.lefts args)
+  , [ConstTy (TyCon tcN)] <- Either.rights args
+  = do tcm <- State.gets envTcMap
+       let mTc = lookupUniqMap tcN tcm
+           mDc = mTc >>= find (\x -> dcTag x == i + 10) . tyConDataCons
+        in case mDc of
+             Just dc -> return (VData dc [])
+             Nothing -> return (VPrim pi args)
 
   | otherwise
   = return (VPrim pi args)

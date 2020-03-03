@@ -8,6 +8,7 @@ module Clash.GHC.Evaluator.Word
 
 import Prelude hiding (pi)
 
+import qualified Control.Monad.State.Strict as State
 import qualified Data.Either as Either
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
@@ -85,21 +86,23 @@ wordPrims = HashMap.fromList
   ]
 
 primQuotRemWord2 :: EvalPrim
-primQuotRemWord2 env pi args
+primQuotRemWord2 pi args
   | Just [i, j, k] <- traverse fromValue (Either.lefts args)
-  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
-  = let !(W# a) = i
-        !(W# b) = j
-        !(W# c) = k
-        !(# d, e #) = quotRemWord2# a b c
-     in return . VData tupDc $ mappend (fmap Right tyArgs)
-          [ Left $ toValue tcm ty (W# d)
-          , Left $ toValue tcm ty (W# e)
-          ]
+  = do tcm <- State.gets envTcMap
+       let (tyArgs, [tupDc]) = typeInfo tcm ty
+           !(W# a) = i
+           !(W# b) = j
+           !(W# c) = k
+           !(# d, e #) = quotRemWord2# a b c
+
+       return . VData tupDc $ mappend (fmap Right tyArgs)
+         [ Left $ toValue tcm ty (W# d)
+         , Left $ toValue tcm ty (W# e)
+         ]
+
   | otherwise
   = return (VPrim pi args)
  where
-  tcm = envTcMap env
   ty = primType pi
 
 primUncheckedShiftL :: EvalPrim
@@ -121,38 +124,42 @@ primWord2Int = evalUnaryOp $ \i ->
 -- TODO There must be a nice way to generalise evalBinaryOp#Word2 and evalBinaryOp#IntC
 
 evalBinaryOpWord2 :: (Word# -> Word# -> (# Word#, Word# #)) -> EvalPrim
-evalBinaryOpWord2 op env pi args
+evalBinaryOpWord2 op pi args
   | Just [i, j] <- traverse fromValue (Either.lefts args)
-  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
-  = let !(W# a) = i
-        !(W# b) = j
-        !(# d, c #) = a `op` b
-     in return . VData tupDc $ mappend (fmap Right tyArgs)
-          [ Left $ toValue tcm ty (W# d)
-          , Left $ toValue tcm ty (W# c)
-          ]
+  = do tcm <- State.gets envTcMap
+       let (tyArgs, [tupDc]) = typeInfo tcm ty
+           !(W# a) = i
+           !(W# b) = j
+           !(# d, c #) = a `op` b
+    
+       return . VData tupDc $ mappend (fmap Right tyArgs)
+         [ Left $ toValue tcm ty (W# d)
+         , Left $ toValue tcm ty (W# c)
+         ]
+
   | otherwise
   = return (VPrim pi args)
  where
-  tcm = envTcMap env
   ty = primType pi
 
 evalBinaryOpIntC :: (Word# -> Word# -> (# Word#, Int# #)) -> EvalPrim
-evalBinaryOpIntC op env pi args
+evalBinaryOpIntC op pi args
   | Just [i, j] <- traverse fromValue (Either.lefts args)
-  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
-  = let !(W# a) = i
-        !(W# b) = j
-        !(# d, c #) = a `op` b
-     in return . VData tupDc $ mappend (fmap Right tyArgs)
-          [ Left $ toValue tcm ty (W# d)
-          , Left $ toValue tcm ty (I# c)
-          ]
+  = do tcm <- State.gets envTcMap
+       let (tyArgs, [tupDc]) = typeInfo tcm ty
+           !(W# a) = i
+           !(W# b) = j
+           !(# d, c #) = a `op` b
+
+       return . VData tupDc $ mappend (fmap Right tyArgs)
+         [ Left $ toValue tcm ty (W# d)
+         , Left $ toValue tcm ty (I# c)
+         ]
+
   | otherwise
   = return (VPrim pi args)
  where
-  tcm = envTcMap env
-  ty  = primType pi
+  ty = primType pi 
 
 evalUnaryOp# :: (Word# -> Word#) -> EvalPrim
 evalUnaryOp# op = evalUnaryOp $ \i ->

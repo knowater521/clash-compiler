@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE TupleSections #-}
 
 module Clash.Core.Evaluator.Semantics
@@ -10,6 +11,7 @@ module Clash.Core.Evaluator.Semantics
 import Prelude hiding (pi)
 
 import Control.Concurrent.Supply (Supply)
+import qualified Control.Monad.State.Strict as State
 import Data.Bitraversable (bitraverse)
 import qualified Data.Either as Either
 import qualified Data.Map.Strict as Map
@@ -17,7 +19,6 @@ import qualified Data.Map.Strict as Map
 import BasicTypes (InlineSpec(..))
 
 import Clash.Core.DataCon
-import Clash.Core.Evaluator.Delay
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
 import Clash.Core.TyCon
@@ -38,74 +39,79 @@ partialEval
   -> InScopeSet
   -> Supply
   -> Term
-  -> Nf
+  -> (Term, BindingMap, EnvPrims)
 partialEval eval ps bm tcm is ids x =
-  runDelay (evaluate (mkEnv eval ps bm tcm is ids) x >>= quote)
+  let (nf, env') = State.runState (evaluate x >>= quote) env
+   in (asTerm nf, fmap asTerm <$> envGlobals env', envPrims env')
+ where
+  env = mkEnv eval ps bm tcm is ids
 {-# SCC partialEval #-}
 
 -- TODO Currently, a globally bound term which is not WHNF is re-evaluated
 -- every time it is looked up in the environment. We should keep this result
 -- so we only evaluate each global once.
 --
--- Does this mean changing Delay to StateT Env Delay ?
+-- Does this mean changing Eval to StateT Env Eval ?
 --
-evaluate :: Env -> Term -> Delay Value
-evaluate env = \case
-  Var v -> evaluateVar env v
+evaluate :: Term -> Eval Value
+evaluate = \case
+  Var v -> evaluateVar v
   Data dc -> return (VData dc [])
   Literal l -> return (VLit l)
   Prim pi -> return (VPrim pi [])
-  Lam x e -> return (VLam x e env)
-  TyLam x e -> return (VTyLam x e env)
-  App x y -> evaluateApp env x y
-  TyApp x ty -> evaluateTyApp env x ty
-  Letrec bs e -> evaluateLetrec env bs e
-  Case e ty xs -> evaluateCase env e ty xs
-  Cast x a b -> evaluateCast env x a b
-  Tick ti x -> evaluateTick env x ti
+  Lam x e -> State.gets (VLam x e)
+  TyLam x e -> State.gets (VTyLam x e)
+  App x y -> evaluateApp x y
+  TyApp x ty -> evaluateTyApp x ty
+  Letrec bs e -> evaluateLetrec bs e
+  Case e ty xs -> evaluateCase e ty xs
+  Cast x a b -> evaluateCast x a b
+  Tick ti x -> evaluateTick x ti
 {-# SCC evaluate #-}
 
-evaluateVar :: Env -> Id -> Delay Value
-evaluateVar e i
-  | Just etv <- Map.lookup i (envLocals e)
-  = go LocalId etv
+evaluateVar :: Id -> Eval Value
+evaluateVar i = do
+  localEnv  <- State.gets envLocals
+  globalEnv <- State.gets envGlobals
 
-  | Just b <- lookupVarEnv i (envGlobals e)
-  , bindingSpec b == Inline || bindingSpec b == Inlinable
-  = go GlobalId (bindingTerm b)
+  if | Just etv <- Map.lookup i localEnv
+     -> go LocalId etv
 
-  | otherwise
-  = return $ VNeu (NeVar i)
+     | Just b <- lookupVarEnv i globalEnv
+     , bindingSpec b == Inline || bindingSpec b == Inlinable
+     -> go GlobalId (bindingTerm b)
+
+     | otherwise
+     -> return $ VNeu (NeVar i)
  where
   -- A variable that refers to a previously unevaluated term is evaluated
   -- on lookup in an environment that doesn't contain that variable. This
   -- is to stop the evaluator looping when looking up a self-recursive
   -- definition (i.e. recursive let bindings).
   --
-  go s = either (evaluate (deleteEnv s i e)) return
+  go s = either (State.withState (deleteEnv s i) . evaluate) return
 {-# SCC evaluateVar #-}
 
-evaluateApp :: Env -> Term -> Term -> Delay Value
-evaluateApp env x y = do
-  evalX <- evaluate env x
-  evalY <- evaluate env y
-  evalApplication Left apply env evalX evalY
+evaluateApp :: Term -> Term -> Eval Value
+evaluateApp x y = do
+  evalX <- evaluate x
+  evalY <- evaluate y
+  evalApplication Left apply evalX evalY
 {-# SCC evaluateApp #-}
 
-evaluateTyApp :: Env -> Term -> Type -> Delay Value
-evaluateTyApp env x ty = do
-  evalX <- evaluate env x
-  evalApplication Right applyTy env evalX ty
+evaluateTyApp :: Term -> Type -> Eval Value
+evaluateTyApp x ty = do
+  evalX <- evaluate x
+  evalApplication Right applyTy evalX ty
 {-# SCC evaluateTyApp #-}
 
 evalApplication
   :: (r -> Either Value Type)
-  -> (Value -> r -> Delay Value)
-  -> Env
+  -> (Value -> r -> Eval Value)
   -> Value
   -> r
-  -> Delay Value
-evalApplication toArg f env x y = do
+  -> Eval Value
+evalApplication toArg f x y = do
   case x of
     VData dc args -> applyToData dc (args <> [toArg y])
     VPrim pi args -> applyToPrim pi (args <> [toArg y])
@@ -119,10 +125,12 @@ evalApplication toArg f env x y = do
    where
     tys = fst $ splitFunForallTy (dcType dc)
 
-  applyToPrim pi args =
+  applyToPrim pi args = do
+    evalPrimOp <- State.gets envPrimEval
+
     case compare (length args) (length tys) of
       LT -> return (VPrim pi args)
-      EQ -> envPrimEval env env pi args
+      EQ -> evalPrimOp pi args
       GT -> error "applyToPrim: Overapplied prim"
    where
     tys = fst $ splitFunForallTy (primType pi)
@@ -131,39 +139,40 @@ evalApplication toArg f env x y = do
 -- Bindings in letrec expressions are evaluated on-demand, relying on the
 -- behaviour of 'evaluateVar' to prevent cycling.
 --
-evaluateLetrec :: Env -> [LetBinding] -> Term -> Delay Value
-evaluateLetrec env bs x = evaluate env' x
+evaluateLetrec :: [LetBinding] -> Term -> Eval Value
+evaluateLetrec bs x =
+  State.withState addTerms (evaluate x)
  where
   terms = fmap (fmap Left) bs
-  env' = foldr (uncurry $ insertEnv LocalId) env terms
+  addTerms env = foldr (uncurry $ insertEnv LocalId) env terms
 {-# SCC evaluateLetrec #-}
 
-evaluateCase :: Env -> Term -> Type -> [Alt] -> Delay Value
-evaluateCase env x ty xs =
-  evaluate env x >>= \case
+evaluateCase :: Term -> Type -> [Alt] -> Eval Value
+evaluateCase x ty xs =
+  evaluate x >>= \case
     VLit l -> litCase l
     VData dc args -> dataCase dc args
     VPrim pi args -> primCase pi args
     v -> neuCase v
  where
   neuCase s =
-    fmap (VNeu . NeCase s ty) (traverse (evaluateAlt env) xs)
+    fmap (VNeu . NeCase s ty) (traverse evaluateAlt xs)
 
   litCase l =
     let eval (pat, e) = case pat of
           LitPat a
-            | l == a -> evaluate env e
-          DefaultPat -> evaluate env e
+            | l == a -> evaluate e
+          DefaultPat -> evaluate e
           -- TODO: We hit this now
           _ -> error ("litCase: Cannot match on " <> show pat)
 
      in evalAlts (const True) eval xs
 
   evalDataPat args tvs ids e =
-    let tys  = zip tvs (Either.rights args)
-        tms  = zip ids (Right <$> Either.lefts args)
-        env' = insertAllEnv LocalId tms (insertAllEnvTys tys env)
-     in evaluate env' e
+    let tys = zip tvs (Either.rights args)
+        tms = zip ids (Right <$> Either.lefts args)
+        addBinders env = insertAllEnv LocalId tms (insertAllEnvTys tys env)
+     in State.withState addBinders (evaluate e)
 
   dataCase dc args =
     let matches = \case
@@ -173,15 +182,15 @@ evaluateCase env x ty xs =
 
         eval (pat, e) = case pat of
           DataPat _ tvs ids -> evalDataPat args tvs ids e
-          DefaultPat -> evaluate env e
+          DefaultPat -> evaluate e
           _ -> error ("dataCase: Cannot match on pattern " <> show pat)
 
      in evalAlts matches eval xs
 
-  primCase pi args =
+  primCase _ args =
     let eval (pat, e) = case pat of
           DataPat _ tvs ids -> evalDataPat args tvs ids e
-          _ -> evaluate env e
+          _ -> evaluate e
 
      in evalAlts (const True) eval xs
 {-# SCC evaluateCase #-}
@@ -189,16 +198,16 @@ evaluateCase env x ty xs =
 -- Evalaute an alternative without selecting it.
 -- This is used when a case expression is neutral.
 --
-evaluateAlt :: Env -> Alt -> Delay (Pat, Value)
-evaluateAlt env (pat, x)
-  | DataPat dc tvs ids <- pat
+evaluateAlt :: Alt -> Eval (Pat, Value)
+evaluateAlt (pat, x)
+  | DataPat _ tvs ids <- pat
   = let tys  = fmap (\tv -> (tv, VarTy tv)) tvs
         tms  = fmap (\i  -> (i, Right . VNeu $ NeVar i)) ids
-        env' = insertAllEnv LocalId tms (insertAllEnvTys tys env)
-     in (pat,) <$> evaluate env' x
+        addBinders env = insertAllEnv LocalId tms (insertAllEnvTys tys env)
+     in (pat,) <$> State.withState addBinders (evaluate x)
 
   | otherwise
-  = (pat,) <$> evaluate env x
+  = (pat,) <$> evaluate x
 {-# SCC evaluateAlt #-}
 
 findBestMatch :: (Pat -> Bool) -> [Alt] -> Alt
@@ -211,49 +220,49 @@ findBestMatch isMatch alts =
   bestMatch (DefaultPat, _) xs = head xs
   bestMatch alt _ = alt
 
-evalAlts :: (Pat -> Bool) -> (Alt -> Delay Value) -> [Alt] -> Delay Value
+evalAlts :: (Pat -> Bool) -> (Alt -> Eval Value) -> [Alt] -> Eval Value
 evalAlts isMatch eval =
   eval . findBestMatch isMatch
 {-# SCC evalAlts #-}
 
-evaluateCast :: Env -> Term -> Type -> Type -> Delay Value
-evaluateCast env x a b = do
-  evalX <- evaluate env x
+evaluateCast :: Term -> Type -> Type -> Eval Value
+evaluateCast x a b = do
+  evalX <- evaluate x
   return (VCast evalX a b)
 {-# SCC evaluateCast #-}
 
-evaluateTick :: Env -> Term -> TickInfo -> Delay Value
-evaluateTick env x ti = do
-  evalX <- evaluate env x
+evaluateTick :: Term -> TickInfo -> Eval Value
+evaluateTick x ti = do
+  evalX <- evaluate x
   return (VTick evalX ti)
 {-# SCC evaluateTick #-}
 
-apply :: Value -> Value -> Delay Value
+apply :: Value -> Value -> Eval Value
 apply (collectValueTicks -> (v1, ts)) v2 =
   case v1 of
     VNeu n -> return (addTicks (VNeu (NeApp n v2)) ts)
 
     VLam x e env ->
-      let val = evaluate (insertEnv LocalId x (Right v2) env) e
-       in delay (fmap (`addTicks` ts) val)
+      let addBinder = insertEnv LocalId x (Right v2)
+       in fmap (`addTicks` ts) $ State.put env >> State.withState addBinder (evaluate e)
 
     _ -> error ("apply: Cannot apply value to " <> show v1)
 {-# SCC apply #-}
 
-applyTy :: Value -> Type -> Delay Value
+applyTy :: Value -> Type -> Eval Value
 applyTy (collectValueTicks -> (v, ts)) ty =
   case v of
     VNeu n ->
       return (addTicks (VNeu (NeTyApp n ty)) ts)
 
     VTyLam x e env ->
-      let val = evaluate (insertEnvTy x ty env) e
-       in delay (fmap (`addTicks` ts) val)
+      let addBinder = insertEnvTy x ty
+       in fmap (`addTicks` ts) $ State.put env >> State.withState addBinder (evaluate e)
 
     _ -> error ("applyTy: Cannot apply type to " <> show v)
 {-# SCC applyTy #-}
 
-quote :: Value -> Delay Nf
+quote :: Value -> Eval Nf
 quote = \case
   VData dc args -> quoteData dc args
   VLit l -> return (NLit l)
@@ -265,45 +274,45 @@ quote = \case
   VNeu n -> NNeu <$> quoteNeutral n
 {-# SCC quote #-}
 
-quoteData :: DataCon -> [Either Value Type] -> Delay Nf
+quoteData :: DataCon -> [Either Value Type] -> Eval Nf
 quoteData dc args = do
   quoteArgs <- traverse (bitraverse quote return) args
   return (NData dc quoteArgs)
 {-# SCC quoteData #-}
 
-quotePrim :: PrimInfo -> [Either Value Type] -> Delay Nf
+quotePrim :: PrimInfo -> [Either Value Type] -> Eval Nf
 quotePrim pi args = do
   quoteArgs <- traverse (bitraverse quote return) args
   return (NPrim pi quoteArgs)
 {-# SCC quotePrim #-}
 
-quoteLam :: Id -> Term -> Env -> Delay Nf
+quoteLam :: Id -> Term -> Env -> Eval Nf
 quoteLam x e env = do
   evalE  <- apply (VLam x e env) (VNeu (NeVar x))
   quoteE <- quote evalE
   return (NLam x quoteE)
 {-# SCC quoteLam #-}
 
-quoteTyLam :: TyVar -> Term -> Env -> Delay Nf
+quoteTyLam :: TyVar -> Term -> Env -> Eval Nf
 quoteTyLam x e env = do
   evalE  <- applyTy (VTyLam x e env) (VarTy x)
   quoteE <- quote evalE
   return (NTyLam x quoteE)
 {-# SCC quoteTyLam #-}
 
-quoteCast :: Value -> Type -> Type -> Delay Nf
+quoteCast :: Value -> Type -> Type -> Eval Nf
 quoteCast x a b = do
   quoteX <- quote x
   return (NCast quoteX a b)
 {-# SCC quoteCast #-}
 
-quoteTick :: Value -> TickInfo -> Delay Nf
+quoteTick :: Value -> TickInfo -> Eval Nf
 quoteTick x ti = do
   quoteX <- quote x
   return (NTick quoteX ti)
 {-# SCC quoteTick #-}
 
-quoteNeutral :: Neutral Value -> Delay (Neutral Nf)
+quoteNeutral :: Neutral Value -> Eval (Neutral Nf)
 quoteNeutral = \case
   NeVar v -> return (NeVar v)
   NeApp x y -> quoteApp x y
@@ -311,20 +320,20 @@ quoteNeutral = \case
   NeCase x ty xs -> quoteCase x ty xs
 {-# SCC quoteNeutral #-}
 
-quoteApp :: Neutral Value -> Value -> Delay (Neutral Nf)
+quoteApp :: Neutral Value -> Value -> Eval (Neutral Nf)
 quoteApp x y = do
   quoteX <- quoteNeutral x
   quoteY <- quote y
   return (NeApp quoteX quoteY)
 {-# SCC quoteApp #-}
 
-quoteTyApp :: Neutral Value -> Type -> Delay (Neutral Nf)
+quoteTyApp :: Neutral Value -> Type -> Eval (Neutral Nf)
 quoteTyApp x ty = do
   quoteX <- quoteNeutral x
   return (NeTyApp quoteX ty)
 {-# SCC quoteTyApp #-}
 
-quoteCase :: Value -> Type -> [(Pat, Value)] -> Delay (Neutral Nf)
+quoteCase :: Value -> Type -> [(Pat, Value)] -> Eval (Neutral Nf)
 quoteCase x ty xs = do
   quoteX  <- quote x
   quoteXs <- traverse (bitraverse return quote) xs

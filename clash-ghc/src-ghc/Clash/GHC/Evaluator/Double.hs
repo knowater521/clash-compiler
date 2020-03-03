@@ -9,6 +9,7 @@ module Clash.GHC.Evaluator.Double
 
 import Prelude hiding (pi)
 
+import qualified Control.Monad.State.Strict as State
 import qualified Data.Either as Either
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
@@ -82,38 +83,42 @@ primAsinhSpecialized = evalUnaryOp# $ \i ->
 #endif
 
 primDecodeDouble2Int :: EvalPrim
-primDecodeDouble2Int env pi args
+primDecodeDouble2Int pi args
   | Just [i] <- traverse fromValue (Either.lefts args)
-  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
-  = let !(D# a) = i
-        !(# p, q, r, s #) = decodeDouble_2Int# a
-     in return . VData tupDc $ mappend (fmap Right tyArgs)
-          [ Left $ toValue tcm ty (I# p)
-          , Left $ toValue tcm ty (W# q)
-          , Left $ toValue tcm ty (W# r)
-          , Left $ toValue tcm ty (I# s)
-          ]
+  = do tcm <- State.gets envTcMap
+       let (tyArgs, [tupDc]) = typeInfo tcm ty
+           !(D# a) = i
+           !(# p, q, r, s #) = decodeDouble_2Int# a
+       
+       return . VData tupDc $ mappend (fmap Right tyArgs)
+         [ Left $ toValue tcm ty (I# p)
+         , Left $ toValue tcm ty (W# q)
+         , Left $ toValue tcm ty (W# r)
+         , Left $ toValue tcm ty (I# s)
+         ]
+
   | otherwise
   = return (VPrim pi args)
  where
-  tcm = envTcMap env
-  ty  = primType pi
+  ty = primType pi
 
 primDecodeDoubleInt64 :: EvalPrim 
-primDecodeDoubleInt64 env pi args
+primDecodeDoubleInt64 pi args
   | Just [i] <- traverse fromValue (Either.lefts args)
-  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
-  = let !(D# a) = i
-        !(# p, q #) = decodeDouble_Int64# a
-     in return . VData tupDc $ mappend (fmap Right tyArgs)
-          [ Left $ toValue tcm ty (fromIntegral (I64# p) :: Int)
-          , Left $ toValue tcm ty (I# q)
-          ]
+  = do tcm <- State.gets envTcMap
+       let (tyArgs, [tupDc]) = typeInfo tcm ty
+           !(D# a) = i
+           !(# p, q #) = decodeDouble_Int64# a
+       
+       return . VData tupDc $ mappend (fmap Right tyArgs)
+         [ Left $ toValue tcm ty (fromIntegral (I64# p) :: Int)
+         , Left $ toValue tcm ty (I# q)
+         ]
+
   | otherwise
   = return (VPrim pi args)
  where
-  tcm = envTcMap env
-  ty  = primType pi
+  ty = primType pi
 
 evalUnaryOp# :: (Double# -> Double#) -> EvalPrim
 evalUnaryOp# op = evalUnaryOp $ \i ->

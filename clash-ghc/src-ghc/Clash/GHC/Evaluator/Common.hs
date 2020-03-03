@@ -5,6 +5,7 @@ import Prelude hiding (pi)
 import Control.Exception (ArithException(..), evaluate, tryJust)
 import Control.DeepSeq (force)
 import qualified Control.Monad.Except as Except
+import qualified Control.Monad.State.Strict as State
 import qualified Data.Either as Either
 import Debug.Trace (traceShow)
 import System.IO.Unsafe (unsafeDupablePerformIO)
@@ -23,11 +24,11 @@ import Clash.GHC.Evaluator.Convert
 -- and arguments back into VPrim.
 --
 evalId :: EvalPrim
-evalId _ pi args = return (VPrim pi args)
+evalId pi args = return (VPrim pi args)
 
 -- TODO Rebase and use the nice interpolation errors here.
 evalMissing :: EvalPrim
-evalMissing _ pi _ =
+evalMissing pi _ =
   error ("No implementation for prim: " <> show (primName pi))
 
 -- Evaluate a generic unary op, provided a means to extract a literal
@@ -37,9 +38,10 @@ evalUnaryOp
   :: (FromValue a, ToValue b)
   => (a -> b)
   -> EvalPrim
-evalUnaryOp op env pi args
+evalUnaryOp op pi args
   | Just [x] <- traverse fromValue (Either.lefts args)
-  = return $ toValue (envTcMap env) (primType pi) (op x)
+  = do tcm <- State.gets envTcMap
+       return $ toValue tcm (primType pi) (op x)
 
   | otherwise
   = return (VPrim pi args)
@@ -53,11 +55,12 @@ evalBinaryOp
   :: (FromValue a, FromValue b, ToValue c)
   => (a -> b -> c)
   -> EvalPrim
-evalBinaryOp op env pi args
+evalBinaryOp op pi args
   | [xV, yV] <- Either.lefts args
   , Just x <- fromValue xV
   , Just y <- fromValue yV
-  = return $ toValue (envTcMap env) (primType pi) (x `op` y)
+  = do tcm <- State.gets envTcMap
+       return $ toValue tcm (primType pi) (x `op` y)
 
   | otherwise
   = return (VPrim pi args)

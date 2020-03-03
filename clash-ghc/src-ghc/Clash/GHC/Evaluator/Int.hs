@@ -8,6 +8,7 @@ module Clash.GHC.Evaluator.Int
 
 import Prelude hiding (pi)
 
+import qualified Control.Monad.State.Strict as State
 import qualified Data.Either as Either
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap (fromList)
@@ -85,21 +86,23 @@ primWord2Double = evalUnaryOp $ \i ->
   let !(W# a) = i in D# (word2Double# a)
 
 evalBinaryOpIntC :: (Int# -> Int# -> (# Int#, Int# #)) -> EvalPrim
-evalBinaryOpIntC op env pi args
+evalBinaryOpIntC op pi args
   | Just [i, j] <- traverse fromValue (Either.lefts args)
-  , (tyArgs, [tupDc]) <- typeInfo (envTcMap env) (primType pi)
-  = let !(I# a) = i
-        !(I# b) = j
-        !(# d, c #) = a `op` b
-     in return . VData tupDc $ mappend (fmap Right tyArgs)
-          [ Left $ toValue tcm ty (I# d)
-          , Left $ toValue tcm ty (I# c)
-          ]
+  = do tcm <- State.gets envTcMap
+       let (tyArgs, [tupDc]) = typeInfo tcm ty
+           !(I# a) = i
+           !(I# b) = j
+           !(# d, c #) = a `op` b
+       
+       return . VData tupDc $ mappend (fmap Right tyArgs)
+         [ Left $ toValue tcm ty (I# d)
+         , Left $ toValue tcm ty (I# c)
+         ]
+
   | otherwise
   = return (VPrim pi args)
  where
-  tcm = envTcMap env
-  ty  = primType pi
+  ty = primType pi
 
 evalUnaryOp# :: (Int# -> Int#) -> EvalPrim
 evalUnaryOp# op = evalUnaryOp $ \i ->

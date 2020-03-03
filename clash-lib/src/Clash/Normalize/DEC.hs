@@ -54,7 +54,6 @@ import           Data.Monoid                      (All (..))
 
 -- internal
 import Clash.Core.DataCon    (DataCon, dcTag)
-import Clash.Core.Evaluator.Models
 import Clash.Core.Evaluator.Semantics (partialEval)
 import Clash.Core.FreeVars
   (termFreeVars', typeFreeVars', localVarsDoNotOccurIn)
@@ -146,7 +145,7 @@ collectGlobals' inScope substitution seen e@(collectArgsTicks -> (fun, args@(_:_
     ids <- Lens.use uniqSupply
     let (ids1,ids2) = splitSupply ids
     uniqSupply Lens..= ids2
-    let eval = asTerm . partialEval primEval gh bndrs tcm inScope ids1
+    let eval = (\(a,_,_) -> a) . partialEval primEval gh bndrs tcm inScope ids1
         eTy  = termType tcm e
     untran <- isUntranslatableType False eTy
     case untran of

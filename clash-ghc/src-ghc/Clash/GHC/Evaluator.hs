@@ -9,7 +9,6 @@ import qualified Data.HashMap.Strict as HashMap
 import Debug.Trace (traceM)
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
-import Clash.Core.Evaluator.Delay
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
 import Clash.Driver.Types (DebugLevel(DebugName))
@@ -31,10 +30,10 @@ import Clash.GHC.Evaluator.Word
 -- time 'Nothing' is returned is when an attempt to evaluate a prim fails.
 --
 evaluatePrimOp :: EvalPrim
-evaluatePrimOp env pi args =
+evaluatePrimOp pi args =
   case HashMap.lookup (primName pi) primsMap of
     Just f ->
-      unsafeDupablePerformIO $ evaluate (f env pi args) `catch` errToUndefined 
+      unsafeDupablePerformIO $ evaluate (f pi args) `catch` errToUndefined 
 
     -- TODO Warning on missing primitive.
     Nothing -> return (VPrim pi args)
@@ -66,7 +65,7 @@ evaluatePrimOp env pi args =
 -- | Emits a warning to stderr using traceM. This is somewhat of a hack
 -- to make up for the fact that clash lacks proper diagnostics.
 --
-warn :: DebugLevel -> PrimInfo -> Delay ()
+warn :: DebugLevel -> PrimInfo -> Eval ()
 warn level pi
   | level >= DebugName = do
       traceM ("No implementation for prim: " <> show (primName pi))

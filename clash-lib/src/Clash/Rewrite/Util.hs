@@ -23,7 +23,7 @@ import           Control.Concurrent.Supply   (splitSupply)
 import           Control.DeepSeq
 import           Control.Exception           (throw)
 import           Control.Lens
-  (Lens', (%=), (+=), (^.), _Left)
+  (Lens', (.=), (%=), (+=), (^.), _Left)
 import qualified Control.Lens                as Lens
 import qualified Control.Monad               as Monad
 #if !MIN_VERSION_base(4,13,0)
@@ -1067,7 +1067,7 @@ whnfRW
   -> Term
   -> Rewrite extra
   -> RewriteMonad extra Term
-whnfRW (TransformContext is0 _) e _ = do
+whnfRW ctx@(TransformContext is0 _) e rw = do
   tcm <- Lens.view tcCache
   bndrs <- Lens.use bindings
   primEval <- Lens.view evaluator
@@ -1076,16 +1076,10 @@ whnfRW (TransformContext is0 _) e _ = do
   uniqSupply Lens..= ids2
   gh <- Lens.use globalHeap
 
-  -- TODO The new globalHeap and localHeap are needed here
-  -- to update the internal state of the normalizer.
-  --
   case partialEval primEval gh bndrs tcm is0 ids1 e of
-    _ -> undefined
-{-
-    (!gh1,ph,v) -> do
-      globalHeap Lens..= gh1
-      bindPureHeap tcm ph rw ctx v
--}
+    (nf, !bndrs', !gh') -> do
+      globalHeap .= gh'
+      bindPureHeap tcm bndrs' rw ctx nf
 {-# SCC whnfRW #-}
 
 -- | Binds variables on the PureHeap over the result of the rewrite
@@ -1093,7 +1087,7 @@ whnfRW (TransformContext is0 _) e _ = do
 -- To prevent unnecessary rewrites only do this when rewrite changed something.
 bindPureHeap
   :: TyConMap
-  -> VarEnv Term
+  -> VarEnv (Binding Term)
   -> Rewrite extra
   -> Rewrite extra
 bindPureHeap tcm heap rw (TransformContext is0 hist) e = do
@@ -1107,8 +1101,8 @@ bindPureHeap tcm heap rw (TransformContext is0 hist) e = do
     is1 = extendInScopeSetList is0 heapIds
     ctx = TransformContext is1 (LetBody heapIds : hist)
 
-    toLetBinding :: (Unique,Term) -> LetBinding
-    toLetBinding (uniq,term) = (nm, term)
+    toLetBinding :: (Unique, Binding Term) -> LetBinding
+    toLetBinding (uniq, b) = (nm, bindingTerm b)
       where
-        ty = termType tcm term
+        ty = termType tcm (bindingTerm b)
         nm = mkLocalId ty (mkUnsafeSystemName "x" uniq) -- See [Note: Name re-creation]
