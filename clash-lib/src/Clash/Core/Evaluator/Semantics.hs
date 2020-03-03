@@ -27,10 +27,6 @@ import Clash.Core.Var
 import Clash.Core.VarEnv
 import Clash.Driver.Types
 
--- TODO: In practice this may not terminate. If this ends up being a problem
--- we should impose a limit on how many times we are acceptable with being
--- delayed - returning the original subterm if we exceed this.
---
 partialEval
   :: EvalPrim
   -> EnvPrims
@@ -41,18 +37,12 @@ partialEval
   -> Term
   -> (Term, BindingMap, EnvPrims)
 partialEval eval ps bm tcm is ids x =
-  let (nf, env') = State.runState (evaluate x >>= quote) env
-   in (asTerm nf, fmap asTerm <$> envGlobals env', envPrims env')
+  (asTerm nf, fmap asTerm <$> envGlobals env', envPrims env')
  where
+  (nf, env') = State.runState (evaluate x >>= quote) env
   env = mkEnv eval ps bm tcm is ids
 {-# SCC partialEval #-}
 
--- TODO Currently, a globally bound term which is not WHNF is re-evaluated
--- every time it is looked up in the environment. We should keep this result
--- so we only evaluate each global once.
---
--- Does this mean changing Eval to StateT Env Eval ?
---
 evaluate :: Term -> Eval Value
 evaluate = \case
   Var v -> evaluateVar v
@@ -96,45 +86,14 @@ evaluateApp :: Term -> Term -> Eval Value
 evaluateApp x y = do
   evalX <- evaluate x
   evalY <- evaluate y
-  evalApplication Left apply evalX evalY
+  apply evalX evalY
 {-# SCC evaluateApp #-}
 
 evaluateTyApp :: Term -> Type -> Eval Value
 evaluateTyApp x ty = do
   evalX <- evaluate x
-  evalApplication Right applyTy evalX ty
+  applyTy evalX ty
 {-# SCC evaluateTyApp #-}
-
-evalApplication
-  :: (r -> Either Value Type)
-  -> (Value -> r -> Eval Value)
-  -> Value
-  -> r
-  -> Eval Value
-evalApplication toArg f x y = do
-  case x of
-    VData dc args -> applyToData dc (args <> [toArg y])
-    VPrim pi args -> applyToPrim pi (args <> [toArg y])
-    _ -> f x y
- where
-  applyToData dc args =
-    case compare (length args) (length tys) of
-      LT -> return (VData dc args)
-      EQ -> return (VData dc args)
-      GT -> error "applyToData: Overapplied DC"
-   where
-    tys = fst $ splitFunForallTy (dcType dc)
-
-  applyToPrim pi args = do
-    evalPrimOp <- State.gets envPrimEval
-
-    case compare (length args) (length tys) of
-      LT -> return (VPrim pi args)
-      EQ -> evalPrimOp pi args
-      GT -> error "applyToPrim: Overapplied prim"
-   where
-    tys = fst $ splitFunForallTy (primType pi)
-{-# SCC evalApplication #-}
 
 -- Bindings in letrec expressions are evaluated on-demand, relying on the
 -- behaviour of 'evaluateVar' to prevent cycling.
@@ -237,10 +196,34 @@ evaluateTick x ti = do
   return (VTick evalX ti)
 {-# SCC evaluateTick #-}
 
+applyToData :: DataCon -> [Either Value Type] -> Eval Value
+applyToData dc args = do
+  tcm <- State.gets envTcMap
+  let tys = fst $ splitCoreFunForallTy tcm (dcType dc)
+
+  case compare (length args) (length tys) of
+    GT -> error "applyToData: Overapplied DataCon"
+    _  -> return (VData dc args)
+
+applyToPrim :: PrimInfo -> [Either Value Type] -> Eval Value
+applyToPrim pi args = do
+  evalPrimOp <- State.gets envPrimEval
+  tcm <- State.gets envTcMap
+
+  let tys = fst $ splitCoreFunForallTy tcm (primType pi)
+
+  case compare (length args) (length tys) of
+    LT -> return (VPrim pi args)
+    EQ -> evalPrimOp pi args
+    GT -> error $ "applyToPrim: Overapplied Prim "
+            <> show (primName pi) <> " type=" <> show (primType pi) <> " args=" <> show args
+
 apply :: Value -> Value -> Eval Value
 apply (collectValueTicks -> (v1, ts)) v2 =
   case v1 of
     VNeu n -> return (addTicks (VNeu (NeApp n v2)) ts)
+    VData dc args -> (`addTicks` ts) <$> applyToData dc (args <> [Left v2])
+    VPrim pi args -> (`addTicks` ts) <$> applyToPrim pi (args <> [Left v2])
 
     VLam x e env ->
       let addBinder = insertEnv LocalId x (Right v2)
@@ -252,8 +235,9 @@ apply (collectValueTicks -> (v1, ts)) v2 =
 applyTy :: Value -> Type -> Eval Value
 applyTy (collectValueTicks -> (v, ts)) ty =
   case v of
-    VNeu n ->
-      return (addTicks (VNeu (NeTyApp n ty)) ts)
+    VNeu n -> return (addTicks (VNeu (NeTyApp n ty)) ts)
+    VData dc args -> (`addTicks` ts) <$> applyToData dc (args <> [Right ty])
+    VPrim pi args -> (`addTicks` ts) <$> applyToPrim pi (args <> [Right ty])
 
     VTyLam x e env ->
       let addBinder = insertEnvTy x ty

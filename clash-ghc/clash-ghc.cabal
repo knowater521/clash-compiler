@@ -201,6 +201,7 @@ library
                       Clash.GHC.Evaluator.Int
                       Clash.GHC.Evaluator.Integer
                       Clash.GHC.Evaluator.Narrowings
+                      Clash.GHC.Evaluator.Natural
                       Clash.GHC.Evaluator.Word
                       Clash.GHC.GHC2Core
                       Clash.GHC.LoadInterfaceFiles

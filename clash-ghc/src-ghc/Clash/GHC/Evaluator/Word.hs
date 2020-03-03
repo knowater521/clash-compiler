@@ -34,13 +34,10 @@ wordPrims = HashMap.fromList
   , ("GHC.Prim.minusWord#", evalBinaryOp# minusWord#)
   , ("GHC.Prim.timesWord#", evalBinaryOp# timesWord#)
   , ("GHC.Prim.timesWord2#", evalBinaryOpWord2 timesWord2#)
-
-    -- TODO These need catchDivByZero
   , ("GHC.Prim.quotWord#", evalBinaryOp# quotWord#)
   , ("GHC.Prim.remWord#", evalBinaryOp# remWord#)
   , ("GHC.Prim.quotRemWord#", evalBinaryOpWord2 quotRemWord#)
   , ("GHC.Prim.quotRemWord2#", primQuotRemWord2)
-
   , ("GHC.Prim.and#", evalBinaryOp# and#)
   , ("GHC.Prim.or#", evalBinaryOp# or#)
   , ("GHC.Prim.xor#", evalBinaryOp# xor#)
@@ -83,6 +80,7 @@ wordPrims = HashMap.fromList
   , ("GHC.Prim.byteSwap32#", evalUnaryOp# byteSwap32#)
   , ("GHC.Prim.byteSwap64#", evalUnaryOp# byteSwap64#)
   , ("GHC.Prim.byteSwap#", evalUnaryOp# byteSwap#)
+  , ("GHC.Types.W#", primW)
   ]
 
 primQuotRemWord2 :: EvalPrim
@@ -120,6 +118,16 @@ primUncheckedShiftRL = evalBinaryOp $ \i j ->
 primWord2Int :: EvalPrim
 primWord2Int = evalUnaryOp $ \i ->
   let !(W# a) = i in I# (word2Int# a)
+
+primW :: EvalPrim
+primW pi args
+  | Just [i] <- traverse fromValue (Either.lefts args)
+  = do tcm <- State.gets envTcMap
+       let ([], [wordDc]) = typeInfo tcm (primType pi)
+           !(W# a) = i
+
+       return $ VData wordDc
+         [Left $ toValue tcm (primType pi) (W# a)]
 
 -- TODO There must be a nice way to generalise evalBinaryOp#Word2 and evalBinaryOp#IntC
 

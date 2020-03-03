@@ -14,7 +14,7 @@ import Clash.Core.Term
 import Clash.Driver.Types (DebugLevel(DebugName))
 
 import Clash.GHC.Evaluator.Bit
-import Clash.GHC.Evaluator.BitVector
+-- import Clash.GHC.Evaluator.BitVector
 import Clash.GHC.Evaluator.Char
 import Clash.GHC.Evaluator.CString
 import Clash.GHC.Evaluator.Double
@@ -23,6 +23,7 @@ import Clash.GHC.Evaluator.Float
 import Clash.GHC.Evaluator.Int
 import Clash.GHC.Evaluator.Integer
 import Clash.GHC.Evaluator.Narrowings
+import Clash.GHC.Evaluator.Natural
 import Clash.GHC.Evaluator.Word
 
 -- If we try to evaluate a prim we haven't added an implementation for in the
@@ -50,7 +51,7 @@ evaluatePrimOp pi args =
 
   primsMap = mconcat
     [ bitPrims
-    , bitVectorPrims
+--  , bitVectorPrims
     , charPrims
     , cStringPrims
     , doublePrims
@@ -59,6 +60,7 @@ evaluatePrimOp pi args =
     , intPrims
     , integerPrims
     , narrowingPrims
+    , naturalPrims
     , wordPrims
     ]
 
