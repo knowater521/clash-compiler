@@ -5,7 +5,6 @@ import Prelude hiding (pi)
 import Control.Exception (ArithException(..), evaluate, tryJust)
 import Control.DeepSeq (force)
 import qualified Control.Monad.Except as Except
-import qualified Control.Monad.State.Strict as State
 import qualified Data.Either as Either
 import Debug.Trace (traceShow)
 import System.IO.Unsafe (unsafeDupablePerformIO)
@@ -17,53 +16,6 @@ import Clash.Core.TyCon
 import Clash.Core.Type
 import Clash.Core.Util (piResultTys, tyNatSize, undefinedTm)
 import Clash.Unique (lookupUniqMap)
-
-import Clash.GHC.Evaluator.Convert
-
--- | For primitives which are themselves values, simply rewrap the PrimInfo
--- and arguments back into VPrim.
---
-evalId :: EvalPrim
-evalId pi args = return (VPrim pi args)
-
--- TODO Rebase and use the nice interpolation errors here.
-evalMissing :: EvalPrim
-evalMissing pi _ =
-  error ("No implementation for prim: " <> show (primName pi))
-
--- Evaluate a generic unary op, provided a means to extract a literal
--- from the input value, and convert the output to a value.
---
-evalUnaryOp
-  :: (FromValue a, ToValue b)
-  => (a -> b)
-  -> EvalPrim
-evalUnaryOp op pi args
-  | Just [x] <- traverse fromValue (Either.lefts args)
-  = do tcm <- State.gets envTcMap
-       return $ toValue tcm (primType pi) (op x)
-
-  | otherwise
-  = return (VPrim pi args)
-
--- Evaluate a generic binary op, provided a means to extract literals
--- from the input values, and convert the output to a value.
---
--- TODO: Does primType pi need to be changed to only the RHS of the last ->
---
-evalBinaryOp
-  :: (FromValue a, FromValue b, ToValue c)
-  => (a -> b -> c)
-  -> EvalPrim
-evalBinaryOp op pi args
-  | [xV, yV] <- Either.lefts args
-  , Just x <- fromValue xV
-  , Just y <- fromValue yV
-  = do tcm <- State.gets envTcMap
-       return $ toValue tcm (primType pi) (x `op` y)
-
-  | otherwise
-  = return (VPrim pi args)
 
 catchDivByZero :: Env -> PrimInfo -> [Either Value Type] -> Term -> Term
 catchDivByZero env pi args x =

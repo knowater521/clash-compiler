@@ -8,8 +8,8 @@ module Clash.GHC.Evaluator.Integer
 
 import Prelude hiding (pi)
 
-import qualified Control.Monad.State.Strict as State
-import qualified Data.Either as Either
+import Control.Monad (MonadPlus(mzero))
+import Data.Either (lefts, rights)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Text (Text)
@@ -20,9 +20,10 @@ import GHC.Prim
 
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
+import Clash.Core.TysPrim
 
-import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Convert
+import Clash.GHC.Evaluator.Strategy
 
 integerPrims :: HashMap Text EvalPrim
 integerPrims = HashMap.fromList
@@ -121,21 +122,15 @@ primEncodeDoubleInteger = evalBinaryOp $ \i j ->
 
 primDecodeDoubleInteger :: EvalPrim
 primDecodeDoubleInteger pi args
-  | Just [i] <- traverse fromValue (Either.lefts args)
-  = do tcm <- State.gets envTcMap
-       let (tyArgs, [tupDc]) = typeInfo tcm ty
-           !(D# a) = i
-           !(# b, c #) = decodeDoubleInteger a
-       
-       return . VData tupDc $ mappend (fmap Right tyArgs)
-         [ Left $ toValue tcm ty b
-         , Left $ toValue tcm ty (I# c)
-         ]
+  | [iVal] <- lefts args
+  = do !(D# a) <- convItem <$> fromValue iVal
+       resTy <- resultType (primType pi) (rights args)
+       let !(# b, c #) = decodeDoubleInteger a
+
+       toValue (Converted (b, I# c) (integerPrimTy, intPrimTy, (), ()), resTy)
 
   | otherwise
-  = return (VPrim pi args)
- where
-  ty = primType pi
+  = mzero
 
 primDoubleFromInteger :: EvalPrim
 primDoubleFromInteger = evalUnaryOp $ \i ->

@@ -8,8 +8,8 @@ module Clash.GHC.Evaluator.Word
 
 import Prelude hiding (pi)
 
-import qualified Control.Monad.State.Strict as State
-import qualified Data.Either as Either
+import Control.Monad (MonadPlus(mzero))
+import Data.Either (lefts, rights)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Text (Text)
@@ -18,9 +18,10 @@ import GHC.Types
 
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
+import Clash.Core.TysPrim
 
-import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Convert
+import Clash.GHC.Evaluator.Strategy
 
 -- | Primitive Operatations defined on Word# and related
 -- fixed-width types (Word{8,16,32,64})
@@ -85,23 +86,18 @@ wordPrims = HashMap.fromList
 
 primQuotRemWord2 :: EvalPrim
 primQuotRemWord2 pi args
-  | Just [i, j, k] <- traverse fromValue (Either.lefts args)
-  = do tcm <- State.gets envTcMap
-       let (tyArgs, [tupDc]) = typeInfo tcm ty
-           !(W# a) = i
-           !(W# b) = j
-           !(W# c) = k
-           !(# d, e #) = quotRemWord2# a b c
+  | [iVal, jVal, kVal] <- lefts args
+  = do !(W# a) <- convItem <$> fromValue iVal
+       !(W# b) <- convItem <$> fromValue jVal
+       !(W# c) <- convItem <$> fromValue kVal
+       resTy <- resultType (primType pi) (rights args)
+       let !(# d, e #) = quotRemWord2# a b c
 
-       return . VData tupDc $ mappend (fmap Right tyArgs)
-         [ Left $ toValue tcm ty (W# d)
-         , Left $ toValue tcm ty (W# e)
-         ]
+       let res = Converted (W# d, W# e) (wordPrimTy, wordPrimTy, (), ())
+       toValue (res, resTy)
 
   | otherwise
-  = return (VPrim pi args)
- where
-  ty = primType pi
+  = mzero
 
 primUncheckedShiftL :: EvalPrim
 primUncheckedShiftL = evalBinaryOp $ \i j ->
@@ -121,53 +117,46 @@ primWord2Int = evalUnaryOp $ \i ->
 
 primW :: EvalPrim
 primW pi args
-  | Just [i] <- traverse fromValue (Either.lefts args)
-  = do tcm <- State.gets envTcMap
-       let ([], [wordDc]) = typeInfo tcm (primType pi)
-           !(W# a) = i
+  | [iVal] <- lefts args
+  = do !(W# _) <- convItem <$> fromValue iVal
+       tyInfo <- typeInfo (primType pi)
 
-       return $ VData wordDc
-         [Left $ toValue tcm (primType pi) (W# a)]
+       case tyInfo of
+         ([], [wordDc]) -> return $ VData wordDc [Left iVal]
+         _ -> mzero
+
+  | otherwise
+  = mzero
 
 -- TODO There must be a nice way to generalise evalBinaryOp#Word2 and evalBinaryOp#IntC
 
 evalBinaryOpWord2 :: (Word# -> Word# -> (# Word#, Word# #)) -> EvalPrim
 evalBinaryOpWord2 op pi args
-  | Just [i, j] <- traverse fromValue (Either.lefts args)
-  = do tcm <- State.gets envTcMap
-       let (tyArgs, [tupDc]) = typeInfo tcm ty
-           !(W# a) = i
-           !(W# b) = j
-           !(# d, c #) = a `op` b
-    
-       return . VData tupDc $ mappend (fmap Right tyArgs)
-         [ Left $ toValue tcm ty (W# d)
-         , Left $ toValue tcm ty (W# c)
-         ]
+  | [iVal, jVal] <- lefts args
+  = do !(W# a) <- convItem <$> fromValue iVal
+       !(W# b) <- convItem <$> fromValue jVal
+       resTy <- resultType (primType pi) (rights args)
+       let !(# c, d #) = op a b
+
+       let res = Converted (W# c, W# d) (wordPrimTy, wordPrimTy, (), ())
+       toValue (res, resTy)
 
   | otherwise
-  = return (VPrim pi args)
- where
-  ty = primType pi
+  = mzero
 
 evalBinaryOpIntC :: (Word# -> Word# -> (# Word#, Int# #)) -> EvalPrim
 evalBinaryOpIntC op pi args
-  | Just [i, j] <- traverse fromValue (Either.lefts args)
-  = do tcm <- State.gets envTcMap
-       let (tyArgs, [tupDc]) = typeInfo tcm ty
-           !(W# a) = i
-           !(W# b) = j
-           !(# d, c #) = a `op` b
+  | [iVal, jVal] <- lefts args
+  = do !(W# a) <- convItem <$> fromValue iVal
+       !(W# b) <- convItem <$> fromValue jVal
+       resTy <- resultType (primType pi) (rights args)
+       let !(# c, d #) = op a b
 
-       return . VData tupDc $ mappend (fmap Right tyArgs)
-         [ Left $ toValue tcm ty (W# d)
-         , Left $ toValue tcm ty (I# c)
-         ]
+       let res = Converted (W# c, I# d) (wordPrimTy, intPrimTy, (), ())
+       toValue (res, resTy)
 
   | otherwise
-  = return (VPrim pi args)
- where
-  ty = primType pi 
+  = mzero
 
 evalUnaryOp# :: (Word# -> Word#) -> EvalPrim
 evalUnaryOp# op = evalUnaryOp $ \i ->

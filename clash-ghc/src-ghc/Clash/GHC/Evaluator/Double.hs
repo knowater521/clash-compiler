@@ -9,8 +9,8 @@ module Clash.GHC.Evaluator.Double
 
 import Prelude hiding (pi)
 
-import qualified Control.Monad.State.Strict as State
-import qualified Data.Either as Either
+import Control.Monad (MonadPlus(mzero))
+import Data.Either (lefts, rights)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Text (Text)
@@ -20,9 +20,10 @@ import GHC.Types
 
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
+import Clash.Core.TysPrim
 
-import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Convert
+import Clash.GHC.Evaluator.Strategy
 
 doublePrims :: HashMap Text EvalPrim
 doublePrims = HashMap.fromList
@@ -84,41 +85,30 @@ primAsinhSpecialized = evalUnaryOp# $ \i ->
 
 primDecodeDouble2Int :: EvalPrim
 primDecodeDouble2Int pi args
-  | Just [i] <- traverse fromValue (Either.lefts args)
-  = do tcm <- State.gets envTcMap
-       let (tyArgs, [tupDc]) = typeInfo tcm ty
-           !(D# a) = i
-           !(# p, q, r, s #) = decodeDouble_2Int# a
-       
-       return . VData tupDc $ mappend (fmap Right tyArgs)
-         [ Left $ toValue tcm ty (I# p)
-         , Left $ toValue tcm ty (W# q)
-         , Left $ toValue tcm ty (W# r)
-         , Left $ toValue tcm ty (I# s)
-         ]
+  | [iVal] <- lefts args
+  = do !(D# a) <- convItem <$> fromValue iVal
+       resTy <- resultType (primType pi) (rights args)
+       let !(# p, q, r, s #) = decodeDouble_2Int# a
+
+       let res = Converted (I# p, W# q, W# r, I# s)
+                   (intPrimTy, wordPrimTy, wordPrimTy, intPrimTy, (), (), (), ())
+       toValue (res, resTy)
 
   | otherwise
-  = return (VPrim pi args)
- where
-  ty = primType pi
+  = mzero
 
 primDecodeDoubleInt64 :: EvalPrim 
 primDecodeDoubleInt64 pi args
-  | Just [i] <- traverse fromValue (Either.lefts args)
-  = do tcm <- State.gets envTcMap
-       let (tyArgs, [tupDc]) = typeInfo tcm ty
-           !(D# a) = i
-           !(# p, q #) = decodeDouble_Int64# a
-       
-       return . VData tupDc $ mappend (fmap Right tyArgs)
-         [ Left $ toValue tcm ty (fromIntegral (I64# p) :: Int)
-         , Left $ toValue tcm ty (I# q)
-         ]
+  | [iVal] <- lefts args
+  = do !(D# a) <- convItem <$> fromValue iVal
+       resTy <- resultType (primType pi) (rights args)
+       let !(# p, q #) = decodeDouble_Int64# a
+
+       let res = Converted (I64# p, I# q) (intPrimTy, intPrimTy, (), ())
+       toValue (res, resTy)
 
   | otherwise
-  = return (VPrim pi args)
- where
-  ty = primType pi
+  = mzero
 
 evalUnaryOp# :: (Double# -> Double#) -> EvalPrim
 evalUnaryOp# op = evalUnaryOp $ \i ->

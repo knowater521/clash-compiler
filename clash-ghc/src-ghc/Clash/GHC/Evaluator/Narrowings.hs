@@ -13,7 +13,7 @@ import GHC.Types
 
 import Clash.Core.Evaluator.Models (EvalPrim)
 
-import Clash.GHC.Evaluator.Common
+import Clash.GHC.Evaluator.Strategy
 
 -- | Primitive Operations to narrow native sized Int / Word.
 --

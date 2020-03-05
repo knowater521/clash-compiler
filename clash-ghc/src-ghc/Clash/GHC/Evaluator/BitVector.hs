@@ -13,7 +13,7 @@ import Data.Text (Text)
 import Clash.Core.Evaluator.Models
 import Clash.Core.Util (tyNatSize)
 
-import Clash.GHC.Evaluator.Common
+import Clash.GHC.Evaluator.Strategy
 
 bitVectorPrims :: HashMap Text EvalPrim
 bitVectorPrims = HashMap.fromList

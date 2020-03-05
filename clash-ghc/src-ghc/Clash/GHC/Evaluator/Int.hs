@@ -8,8 +8,8 @@ module Clash.GHC.Evaluator.Int
 
 import Prelude hiding (pi)
 
-import qualified Control.Monad.State.Strict as State
-import qualified Data.Either as Either
+import Control.Monad (MonadPlus(mzero))
+import Data.Either (lefts, rights)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap (fromList)
 import Data.Text (Text)
@@ -19,9 +19,10 @@ import GHC.Types
 
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
+import Clash.Core.TysPrim
 
-import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Convert
+import Clash.GHC.Evaluator.Strategy
 
 -- | Primitive Operations defined on Int#
 --
@@ -87,22 +88,17 @@ primWord2Double = evalUnaryOp $ \i ->
 
 evalBinaryOpIntC :: (Int# -> Int# -> (# Int#, Int# #)) -> EvalPrim
 evalBinaryOpIntC op pi args
-  | Just [i, j] <- traverse fromValue (Either.lefts args)
-  = do tcm <- State.gets envTcMap
-       let (tyArgs, [tupDc]) = typeInfo tcm ty
-           !(I# a) = i
-           !(I# b) = j
-           !(# d, c #) = a `op` b
-       
-       return . VData tupDc $ mappend (fmap Right tyArgs)
-         [ Left $ toValue tcm ty (I# d)
-         , Left $ toValue tcm ty (I# c)
-         ]
+  | [iVal, jVal] <- lefts args
+  = do !(Converted (I# a) aArgs) <- fromValue iVal
+       !(Converted (I# b) bArgs) <- fromValue jVal
+       resTy <- resultType (primType pi) (rights args)
+       let !(# c, d #) = op a b
+
+       let res = Converted (I# c, I# d) (intPrimTy, intPrimTy, aArgs, bArgs)
+       toValue (res, resTy)
 
   | otherwise
-  = return (VPrim pi args)
- where
-  ty = primType pi
+  = mzero
 
 evalUnaryOp# :: (Int# -> Int#) -> EvalPrim
 evalUnaryOp# op = evalUnaryOp $ \i ->

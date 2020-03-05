@@ -7,6 +7,7 @@ import Prelude hiding (lookup, pi)
 
 import Control.Concurrent.Supply (Supply)
 import Control.Monad.State.Strict (State)
+import Control.Monad.Trans.Maybe (MaybeT)
 import Control.DeepSeq (NFData(..))
 import Data.Bifunctor (first, second)
 import Data.Foldable (foldl')
@@ -31,7 +32,9 @@ import Clash.Core.VarEnv
 import Clash.Driver.Types
 
 type Eval     = State Env
-type EvalPrim = PrimInfo -> [Either Value Type] -> Eval Value
+type PrimEval = MaybeT Eval
+
+type EvalPrim = PrimInfo -> [Either Value Type] -> PrimEval Value
 
 type EnvGlobals = VarEnv (Binding (Either Term Value))
 type EnvPrims = (IntMap Value, Int)
@@ -147,12 +150,14 @@ updateEnvPrim i v env =
 -- the scrutinee is not yet an inspectable value. Consider:
 --
 -- v              Stuck if "v" is a free variable
+-- p x1 .. xn     Stuck if "p" has no primitive reduction rule
 -- x $ y          Stuck if "x" is not known to be a lambda
 -- x @ A          Stuck if "x" is not known to be a type lambda
 -- case x of ...  Stuck if "x" is neutral (cannot choose an alternative)
 --
 data Neutral a
   = NeVar   (Var Term)
+  | NePrim  PrimInfo [Either Value Type]
   | NeApp   (Neutral a) a
   | NeTyApp (Neutral a) Type
   | NeCase  a Type [(Pat, a)]
@@ -205,6 +210,7 @@ instance AsTerm Term where
 
 instance (AsTerm a) => AsTerm (Neutral a) where
   asTerm (NeVar v)        = Var v
+  asTerm (NePrim pi args) = mkApps (Prim pi) (first asTerm <$> args)
   asTerm (NeApp x y)      = App (asTerm x) (asTerm y)
   asTerm (NeTyApp x ty)   = TyApp (asTerm x) ty
   asTerm (NeCase x ty as) = Case (asTerm x) ty (second asTerm <$> as)

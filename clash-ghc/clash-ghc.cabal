@@ -131,6 +131,7 @@ library
                       base                      >= 4.11     && < 5,
                       bifunctors                >= 4.1.1    && < 6.0,
                       bytestring                >= 0.9      && < 0.11,
+                      constraints,
                       containers                >= 0.5.4.0  && < 0.7,
                       directory                 >= 1.2      && < 1.4,
                       filepath                  >= 1.3      && < 1.5,
@@ -194,14 +195,21 @@ library
                       Clash.GHC.Evaluator.Char
                       Clash.GHC.Evaluator.Common
                       Clash.GHC.Evaluator.Convert
+                      Clash.GHC.Evaluator.Convert.FromValue
+                      Clash.GHC.Evaluator.Convert.Internal
+                      Clash.GHC.Evaluator.Convert.ToValue
                       Clash.GHC.Evaluator.CString
                       Clash.GHC.Evaluator.Double
                       Clash.GHC.Evaluator.EnumTag
                       Clash.GHC.Evaluator.Float
+                      Clash.GHC.Evaluator.Index
                       Clash.GHC.Evaluator.Int
                       Clash.GHC.Evaluator.Integer
                       Clash.GHC.Evaluator.Narrowings
                       Clash.GHC.Evaluator.Natural
+                      Clash.GHC.Evaluator.Signed
+                      Clash.GHC.Evaluator.Strategy
+                      Clash.GHC.Evaluator.Unsigned
                       Clash.GHC.Evaluator.Word
                       Clash.GHC.GHC2Core
                       Clash.GHC.LoadInterfaceFiles

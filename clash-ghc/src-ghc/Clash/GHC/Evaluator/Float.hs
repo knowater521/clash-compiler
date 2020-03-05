@@ -9,8 +9,8 @@ module Clash.GHC.Evaluator.Float
 
 import Prelude hiding (pi)
 
-import qualified Control.Monad.State.Strict as State
-import qualified Data.Either as Either
+import Control.Monad (MonadPlus(mzero))
+import Data.Either (lefts, rights)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Text (Text)
@@ -19,9 +19,10 @@ import GHC.Types
 
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
+import Clash.Core.TysPrim
 
-import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Convert
+import Clash.GHC.Evaluator.Strategy
 
 floatPrims :: HashMap Text EvalPrim
 floatPrims = HashMap.fromList
@@ -82,21 +83,16 @@ primFloat2Double = evalUnaryOp $ \i ->
 
 primDecodeFloat_Int :: EvalPrim
 primDecodeFloat_Int pi args
-  | Just [i] <- traverse fromValue (Either.lefts args)
-  = do tcm <- State.gets envTcMap
-       let (tyArgs, [tupDc]) = typeInfo tcm ty
-           !(F# a) = i
-           !(# p, q #) = decodeFloat_Int# a
-       
-       return . VData tupDc $ mappend (fmap Right tyArgs)
-         [ Left $ toValue tcm ty (I# p)
-         , Left $ toValue tcm ty (I# q)
-         ]
+  | [iVal] <- lefts args
+  = do !(F# a) <- convItem <$> fromValue iVal
+       resTy <- resultType (primType pi) (rights args)
+       let !(# p, q #) = decodeFloat_Int# a
+
+       let res = Converted (I# p, I# q) (intPrimTy, intPrimTy, (), ())
+       toValue (res, resTy)
 
   | otherwise
-  = return (VPrim pi args)
- where
-  ty = primType pi
+  = mzero
 
 evalUnaryOp# :: (Float# -> Float#) -> EvalPrim
 evalUnaryOp# op = evalUnaryOp $ \i ->

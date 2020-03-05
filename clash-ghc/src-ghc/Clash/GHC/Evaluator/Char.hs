@@ -7,8 +7,8 @@ module Clash.GHC.Evaluator.Char
 
 import Prelude hiding (pi)
 
-import qualified Control.Monad.State.Strict as State
-import qualified Data.Either as Either
+import Control.Monad (MonadPlus(mzero))
+import Data.Either (lefts)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap (fromList)
 import Data.Text (Text)
@@ -18,8 +18,8 @@ import GHC.Types
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
 
-import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Convert
+import Clash.GHC.Evaluator.Strategy
 
 -- | Primitive Operations defined on Char / Char#
 --
@@ -41,16 +41,16 @@ primOrd = evalUnaryOp $ \i ->
 
 primC :: EvalPrim
 primC pi args
-  | Just [i] <- traverse fromValue (Either.lefts args)
-  = do tcm <- State.gets envTcMap
-       let ([], [charDc]) = typeInfo tcm (primType pi)
-           !(C# a) = i
-       
-       return $ VData charDc
-         [Left $ toValue tcm (primType pi) (C# a)]
+  | [iVal] <- lefts args
+  = do !(C# _) <- convItem <$> fromValue iVal
+       tyInfo <- typeInfo (primType pi)
+
+       case tyInfo of
+         ([], [charDc]) -> return $ VData charDc [Left iVal]
+         _ -> mzero
 
   | otherwise
-  = return (VPrim pi args)
+  = mzero
 
 evalComparison# :: (Char# -> Char# -> Int#) -> EvalPrim
 evalComparison# op = evalBinaryOp $ \i j ->

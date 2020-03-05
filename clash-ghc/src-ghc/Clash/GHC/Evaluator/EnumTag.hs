@@ -1,13 +1,13 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Clash.GHC.Evaluator.EnumTag
   ( enumTagPrims
   ) where
 
-import Prelude hiding (pi)
-
+import Control.Monad (MonadPlus(mzero))
 import qualified Control.Monad.State.Strict as State
-import qualified Data.Either as Either
+import Control.Monad.Trans.Maybe (MaybeT(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.List (find)
@@ -27,16 +27,16 @@ enumTagPrims = HashMap.fromList
   ]
 
 primTagToEnum :: EvalPrim
-primTagToEnum pi args
-  | Just [i] <- traverse fromValue (Either.lefts args)
-  , [ConstTy (TyCon tcN)] <- Either.rights args
-  = do tcm <- State.gets envTcMap
-       let mTc = lookupUniqMap tcN tcm
-           mDc = mTc >>= find (\x -> dcTag x == i + 10) . tyConDataCons
-        in case mDc of
-             Just dc -> return (VData dc [])
-             Nothing -> return (VPrim pi args)
+primTagToEnum _ = \case
+  [Right (ConstTy (TyCon tcN)), Left iVal] -> do
+    tcm <- State.gets envTcMap
+    i   <- convItem <$> fromValue iVal
+    tc  <- hoist $ lookupUniqMap tcN tcm
+    dc  <- hoist $ find (\x -> dcTag x == i + 1) (tyConDataCons tc)
 
-  | otherwise
-  = return (VPrim pi args)
+    return $ VData dc []
+
+  _ -> mzero
+ where
+  hoist = MaybeT . return
 

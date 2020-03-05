@@ -6,24 +6,25 @@ import Prelude hiding (pi)
 
 import Control.Exception.Base
 import qualified Data.HashMap.Strict as HashMap
-import Debug.Trace (traceM)
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
-import Clash.Driver.Types (DebugLevel(DebugName))
 
 import Clash.GHC.Evaluator.Bit
--- import Clash.GHC.Evaluator.BitVector
+import Clash.GHC.Evaluator.BitVector
 import Clash.GHC.Evaluator.Char
 import Clash.GHC.Evaluator.CString
 import Clash.GHC.Evaluator.Double
 import Clash.GHC.Evaluator.EnumTag
 import Clash.GHC.Evaluator.Float
+import Clash.GHC.Evaluator.Index
 import Clash.GHC.Evaluator.Int
 import Clash.GHC.Evaluator.Integer
 import Clash.GHC.Evaluator.Narrowings
 import Clash.GHC.Evaluator.Natural
+import Clash.GHC.Evaluator.Signed
+import Clash.GHC.Evaluator.Unsigned
 import Clash.GHC.Evaluator.Word
 
 -- If we try to evaluate a prim we haven't added an implementation for in the
@@ -33,10 +34,11 @@ import Clash.GHC.Evaluator.Word
 evaluatePrimOp :: EvalPrim
 evaluatePrimOp pi args =
   case HashMap.lookup (primName pi) primsMap of
+    -- TODO We should probably only 'evaluate' if the prim might throw an
+    -- exception instead of on every prim.
     Just f ->
       unsafeDupablePerformIO $ evaluate (f pi args) `catch` errToUndefined 
 
-    -- TODO Warning on missing primitive.
     Nothing -> return (VPrim pi args)
  where
   errToUndefined DivideByZero =
@@ -51,27 +53,19 @@ evaluatePrimOp pi args =
 
   primsMap = mconcat
     [ bitPrims
---  , bitVectorPrims
+    , bitVectorPrims
     , charPrims
     , cStringPrims
     , doublePrims
     , enumTagPrims
     , floatPrims
+    , indexPrims
     , intPrims
     , integerPrims
     , narrowingPrims
     , naturalPrims
+    , signedPrims
+    , unsignedPrims
     , wordPrims
     ]
-
--- | Emits a warning to stderr using traceM. This is somewhat of a hack
--- to make up for the fact that clash lacks proper diagnostics.
---
-warn :: DebugLevel -> PrimInfo -> Eval ()
-warn level pi
-  | level >= DebugName = do
-      traceM ("No implementation for prim: " <> show (primName pi))
-      return ()
-
-  | otherwise = return ()
 

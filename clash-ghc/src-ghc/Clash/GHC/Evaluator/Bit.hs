@@ -7,7 +7,6 @@ module Clash.GHC.Evaluator.Bit
 
 import Prelude hiding (pi)
 
-import qualified Control.Monad.State.Strict as State
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Text (Text)
@@ -17,8 +16,8 @@ import Clash.Sized.Internal.BitVector
 import Clash.Core.Evaluator.Models
 import Clash.Core.Term
 
-import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Convert
+import Clash.GHC.Evaluator.Strategy
 
 bitPrims :: HashMap Text EvalPrim
 bitPrims = HashMap.fromList
@@ -45,12 +44,10 @@ bitPrims = HashMap.fromList
   ]
 
 primHigh :: EvalPrim
-primHigh pi _ = do
-  tcm <- State.gets envTcMap
-  return $ toValue tcm (primType pi) (Bit 0 1)
+primHigh pi _ =
+  toValue (Converted (Bit 0 1) (), primType pi)
 
 primLow :: EvalPrim
-primLow pi _ = do
-  tcm <- State.gets envTcMap
-  return $ toValue tcm (primType pi) (Bit 0 0)
+primLow pi _ =
+  toValue (Converted (Bit 0 0) (), primType pi)
 

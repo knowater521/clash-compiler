@@ -4,6 +4,7 @@
 
 module Clash.Core.Evaluator.Semantics
   ( partialEval
+  , partialEval'
   , evaluate
   , quote
   ) where
@@ -12,9 +13,11 @@ import Prelude hiding (pi)
 
 import Control.Concurrent.Supply (Supply)
 import qualified Control.Monad.State.Strict as State
+import Control.Monad.Trans.Maybe (runMaybeT)
 import Data.Bitraversable (bitraverse)
 import qualified Data.Either as Either
 import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 
 import BasicTypes (InlineSpec(..))
 
@@ -42,6 +45,20 @@ partialEval eval ps bm tcm is ids x =
   (nf, env') = State.runState (evaluate x >>= quote) env
   env = mkEnv eval ps bm tcm is ids
 {-# SCC partialEval #-}
+
+partialEval'
+  :: EvalPrim
+  -> EnvPrims
+  -> BindingMap
+  -> TyConMap
+  -> InScopeSet
+  -> Supply
+  -> Term
+  -> Nf
+partialEval' eval ps bm tcm is ids x =
+  fst $ State.runState (evaluate x >>= quote) env
+ where
+  env = mkEnv eval ps bm tcm is ids
 
 evaluate :: Term -> Eval Value
 evaluate = \case
@@ -214,9 +231,8 @@ applyToPrim pi args = do
 
   case compare (length args) (length tys) of
     LT -> return (VPrim pi args)
-    EQ -> evalPrimOp pi args
-    GT -> error $ "applyToPrim: Overapplied Prim "
-            <> show (primName pi) <> " type=" <> show (primType pi) <> " args=" <> show args
+    EQ -> fromMaybe (VNeu (NePrim pi args)) <$> runMaybeT (evalPrimOp pi args)
+    GT -> error $ "applyToPrim: Overapplied Prim"
 
 apply :: Value -> Value -> Eval Value
 apply (collectValueTicks -> (v1, ts)) v2 =
@@ -299,6 +315,7 @@ quoteTick x ti = do
 quoteNeutral :: Neutral Value -> Eval (Neutral Nf)
 quoteNeutral = \case
   NeVar v -> return (NeVar v)
+  NePrim pi args -> return (NePrim pi args)
   NeApp x y -> quoteApp x y
   NeTyApp x ty -> quoteTyApp x ty
   NeCase x ty xs -> quoteCase x ty xs

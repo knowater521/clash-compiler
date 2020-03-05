@@ -12,6 +12,7 @@ import Clash.Core.Evaluator.Models
 
 import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Convert
+import Clash.GHC.Evaluator.Strategy
 
 byteArrayPrims :: HashMap Text EvalPrim
 byteArrayPrims = HashMap.fromList

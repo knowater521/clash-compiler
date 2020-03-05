@@ -51,7 +51,7 @@ runPE src = do
   forM_ (reverse $ sortBy (comparing (nameOcc . varName . fst)) idsTerms) $ \(i,t) -> do
     putStrLn $ "Evaluating " <> show (nameOcc (varName i))
     print t
-    print (fstOf3 $ partialEval evaluatePrimOp (mempty, 0) bm tcm emptyInScopeSet ids t)
+    print (partialEval' evaluatePrimOp (mempty, 0) bm tcm emptyInScopeSet ids t)
 
     hFlush stdout
     hFlush stderr

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Clash.GHC.Evaluator.CString
-  ( cStringPrims
+module Clash.GHC.Evaluator.Transformation
+  ( transformationPrims
   ) where
 
 import Data.HashMap.Strict (HashMap)
@@ -13,8 +13,8 @@ import Clash.Core.Evaluator.Models
 import Clash.GHC.Evaluator.Common
 import Clash.GHC.Evaluator.Strategy
 
-cStringPrims :: HashMap Text EvalPrim
-cStringPrims = HashMap.fromList
-  [ ("GHC.CString.unpackCString#", evalId)
+transformationPrims :: HashMap Text EvalPrim
+transformationPrims = HashMap.fromList
+  [ ("Clash.Transformations.removedArg", evalId)
   ]
 
