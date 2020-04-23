@@ -151,9 +151,14 @@ hackage-release:
 #  >  - https://snapcraft.io/docs/snap-layouts
 #
 # If this limitation is ever annulled, we can use a "proper" nix distribution.
+#
+# The timeout for this stage is 10h instead of the normal 2h, as builds can
+# take considerably longer if the nix cache is not valid.
+#
 snap-bindist:
   image: clashlang/nixbuntu:2.3.3
   stage: build
+  timeout: 10h
   cache:
     key: usr-nix-$CI_JOB_NAME
     paths:
