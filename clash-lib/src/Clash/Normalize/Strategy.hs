@@ -31,35 +31,37 @@ import Clash.Rewrite.Util
 -- | Normalisation transformation
 normalization :: NormRewrite
 normalization =
-  rmDeadcode >-> constantPropagation >-> rmUnusedExpr >-!-> anf >-!-> rmDeadcode >->
-  bindConst >-> letTL
+  rmDeadcode >-> constantPropagation >-> rmUnusedExpr >-!->
 #if !EXPERIMENTAL_EVALUATOR
-  >-> evalConst
+  anf >-!->
 #endif
+  rmDeadcode >->
+  bindConst >-> letTL
+  >-> evalConst
   >-!-> cse >-!-> cleanup >->
   xOptim >-> rmDeadcode >->
   cleanup >-> recLetRec >-> splitArgs
   where
+#if !EXPERIMENTAL_EVALUATOR
     anf        = topdownR (apply "nonRepANF" nonRepANF) >-> apply "ANF" makeANF >-> topdownR (apply "caseCon" caseCon)
+#endif
     letTL      = topdownSucR (apply "topLet" topLet)
     recLetRec  = apply "recToLetRec" recToLetRec
     rmUnusedExpr = bottomupR (apply "removeUnusedExpr" removeUnusedExpr)
     rmDeadcode = bottomupR (apply "deadcode" deadCode)
     bindConst  = topdownR (apply "bindConstantVar" bindConstantVar)
     -- See [Note] bottomup traversal evalConst:
-#if !EXPERIMENTAL_EVALUATOR
     evalConst  = bottomupR (apply "evalConst" reduceConst)
-#endif
     cse        = topdownR (apply "CSE" simpleCSE)
     xOptim     = bottomupR (apply "xOptimize" xOptimize)
     cleanup    = topdownR (apply "etaExpandSyn" etaExpandSyn) >->
                  topdownSucR (apply "inlineCleanup" inlineCleanup) !->
-                 innerMost (applyMany [("caseCon"        , caseCon)
-                                      ,("bindConstantVar", bindConstantVar)
+                 innerMost (applyMany [{-("caseCon"        , caseCon)
+                                      ,-}("bindConstantVar", bindConstantVar)
                                       ,("letFlat"        , flattenLet)])
                  >-> rmDeadcode >-> letTL
-    splitArgs  = topdownR (apply "separateArguments" separateArguments) !->
-                 topdownR (apply "caseCon" caseCon)
+    splitArgs  = topdownR (apply "separateArguments" separateArguments) -- !->
+                 -- topdownR (apply "caseCon" caseCon)
 
 
 constantPropagation :: NormRewrite
@@ -86,17 +88,15 @@ constantPropagation =
       [ ("applicationPropagation", appPropFast          )
       , ("bindConstantVar"       , bindConstantVar      )
       , ("caseLet"               , caseLet              )
-#if !EXPERIMENTAL_EVALUATOR
       , ("caseCase"              , caseCase             )
-#endif
-      , ("caseCon"               , caseCon              )
+--    , ("caseCon"               , caseCon              )
       , ("elemExistentials"      , elemExistentials     )
       , ("caseElemNonReachable"  , caseElemNonReachable )
       , ("removeUnusedExpr"      , removeUnusedExpr     )
       -- These transformations can safely be applied in a top-down traversal as
       -- they themselves check whether the to-be-inlined binder is recursive or not.
-      , ("inlineWorkFree"  , inlineWorkFree)
-      , ("inlineSmall"     , inlineSmall)
+--    , ("inlineWorkFree"  , inlineWorkFree)
+--    , ("inlineSmall"     , inlineSmall)
       , ("bindOrLiftNonRep", inlineOrLiftNonRep) -- See: [Note] bindNonRep before liftNonRep
                                                  -- See: [Note] bottom-up traversal for liftNonRep
       , ("reduceNonRepPrim", reduceNonRepPrim)
@@ -106,7 +106,7 @@ constantPropagation =
       , ("letCast"         , letCast)
       , ("splitCastWork"   , splitCastWork)
       , ("argCastSpec"     , argCastSpec)
-      , ("inlineCast"      , inlineCast)
+--    , ("inlineCast"      , inlineCast)
       , ("eliminateCastCast",eliminateCastCast)
       ]
 
